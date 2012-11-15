@@ -1,5 +1,5 @@
 import numpy as np
-
+import time
 from kiva.agg import points_in_polygon
 
 from enable.api import Component, ComponentEditor
@@ -79,23 +79,20 @@ class MyLasso(LassoSelection):
 
     def __init__(self, *args, **kwargs):
         super(MyLasso, self).__init__(*args, **kwargs)
-        self.incremental_select =  True
-        y,x = self.model.data.shape
+        x,y = self.model.data.shape
         self.idxs = np.array([(i,j) for i in range(x) for j in range(y)])
         self.mask = np.zeros((x,y), dtype=np.bool)
 
     def _curr_selection_default(self):
         return None
 
-    def _disjoint_selections_changed(self, new_selection):
+    def _updated_fired(self, new_selection):
         if not self.curr_selection:
             self.curr_selection = Selection(name='Selection')
             self.model.selections.append(self.curr_selection)
        
-        inpoly = points_in_polygon(self.idxs, self._active_selection)
-        #mask_idx = self.idxs[inpoly]
-        #self.mask[self.idxs[tuple(mask_idx.transpose())]] = 1
-        
+        inpoly = np.array(points_in_polygon(self.idxs, self._active_selection),dtype=np.bool)
+        self.mask = inpoly.reshape(*self.model.data.shape)
         self.curr_selection.coordinates = self.mask
 
     def _selection_completed_fired(self):
@@ -104,7 +101,8 @@ class MyLasso(LassoSelection):
 
 def test_data():
     t = np.linspace(-np.pi, np.pi, 200)
-    X,Y = np.meshgrid(t,t)
+    u = np.linspace(-np.pi, np.pi, 300)
+    X,Y = np.meshgrid(t,u)
     return np.cos(2 * np.pi * 2 * X) + np.cos(2 * np.pi * 7 * Y)
 
 if __name__=='__main__':
