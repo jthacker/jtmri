@@ -78,8 +78,7 @@ class ImageIndexTool(BaseTool):
 
     def _update_slices(self, event):
             plot = self.component
-            ndx = plot.map_index((event.x, event.y),
-                                 threshold=5.0, index_only=True)
+            ndx = plot.map_index((event.x, event.y), index_only=True)
             if ndx:
                 self.callback(self, *ndx)
 
@@ -167,7 +166,7 @@ class PlotFrame(DemoFrame):
         self.center = imgplot
 
         # Right Plot
-        rightplot = Plot(self.plotdata, width=400, resizable="v", padding=0)
+        rightplot = Plot(self.plotdata, width=300, resizable="v", padding=0)
         rightplot.value_range = centerplot.value_range
         imgplot = rightplot.img_plot("yz",
                                 xbounds=(model.zs[0], model.zs[-1]),
@@ -177,7 +176,7 @@ class PlotFrame(DemoFrame):
         self.right = imgplot
 
         # Bottom Plot
-        bottomplot = Plot(self.plotdata, height=450, resizable="h", padding=0)
+        bottomplot = Plot(self.plotdata, height=350, resizable="h", padding=0)
         bottomplot.index_range = centerplot.index_range
         imgplot = bottomplot.img_plot("xz",
                                 xbounds=(model.xs[0], model.xs[-1]),
@@ -187,7 +186,7 @@ class PlotFrame(DemoFrame):
         self.bottom = imgplot
 
         # Create Container and add all Plots
-        container = GridPlotContainer(padding=20, fill_padding=True,
+        container = GridPlotContainer(padding=10, fill_padding=True,
                                       bgcolor="white", use_backbuffer=True,
                                       shape=(2,2), spacing=(12,12))
         container.add(centerplot)
