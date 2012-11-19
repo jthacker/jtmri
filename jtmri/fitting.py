@@ -2,9 +2,9 @@ import inspect
 import numpy as np
 import pylab as plt
 from scipy.optimize import curve_fit
-from jmt.cache import memoize
+from jtmri.cache import memoize
 
-log = logging.getLogger('jmt.fitting')
+log = logging.getLogger('jtmri.fitting')
 
 def _minValueFailedFitFunc(initialGuess):
     size = len(initialGuess)

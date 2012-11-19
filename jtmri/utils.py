@@ -6,7 +6,7 @@ import csv
 import re
 import itertools
 
-log = logging.getLogger('jmt.utils')
+log = logging.getLogger('jtmri.utils')
 
 class ProgressMeter(object):
     '''Displays a CLI progress meter.

@@ -6,7 +6,7 @@ from UserDict import DictMixin
 from hashlib import sha1
 import logging
 
-log = logging.getLogger('jmt.cache')
+log = logging.getLogger('jtmri.cache')
 
 class Cache(DictMixin):
     def __init__(self):
