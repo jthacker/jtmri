@@ -23,10 +23,8 @@ class Model(HasTraits):
 
     vals = Array
 
-    def __init__(self):
+    def set_data(self,data):
         '''data should be a 3D numpy array'''
-        super(Model, self).__init__()
-        data = np.load('/Users/jthacker/Downloads/Internet/test.dat.npy')
         assert data.ndim == 3
         
         self.npts_x,self.npts_y,self.npts_z = data.shape
@@ -145,9 +143,12 @@ class PlotFrame(DemoFrame):
         self.bottom.invalidate_and_redraw()
         return
 
+    def __init__(self, data, *args, **kwargs):
+        self.model = Model()
+        self.model.setdata = data
+
     def _create_window(self):
         # Create the model
-        self.model = model = Model()
         cmap = jet
 
         self._update_model(cmap)
@@ -227,6 +228,9 @@ class PlotFrame(DemoFrame):
         pd.set_data("yz", cube[self.slice_x, :, :])
 
 
-if __name__ == "__main__":
-    demo_main(PlotFrame, size=(800,700), title="Cube analyzer")
+def plot(data):
+    #demo_main(PlotFrame, size=(800,700), title="Cube analyzer")
+    frame = PlotFrame(data, size=(800,700))
+    frame.configure_traits()
+
 

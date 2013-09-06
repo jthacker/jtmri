@@ -169,8 +169,12 @@ def interleave(*args):
 
 
 def chunks(l, n):
-    """ Yield successive n-sized chunks from l.
-    """
+    ''' Yield successive n-sized chunks from l. '''
     for i in xrange(0, len(l), n):
         yield l[i:i+n]
 
+def extract(m, thresh=0):
+    '''Find the smallest rectangular region in the matrix that can hold
+    all values > thresh'''
+    indx = [slice(a.min(),a.max()+1) for a in (m > thresh).nonzero()]
+    return m[indx]

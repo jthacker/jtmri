@@ -1,8 +1,11 @@
 import inspect
 import numpy as np
 import pylab as plt
+import logging
+import operator as op
 from scipy.optimize import curve_fit
 from jtmri.cache import memoize
+from jtmri.utils import ProgressMeter
 
 log = logging.getLogger('jtmri.fitting')
 
@@ -115,16 +118,16 @@ class Fitter(object):
         log.debug("Fit [%s] params = %s" % ('succeeded' if fit.success else 'FAILED', fit.paramDict))
         return fit
 
-@memoize
-def fitMapper(fitter, images):
+def fitMapper(fitter, images, x, guess):
     '''Fitter is a function that takes a numpy array of y values
     and returns the parameter that was fit.
+    TODO: fit func needs to return the proper thing
     '''
     pm = ProgressMeter(reduce(op.mul, images[0].shape), 'Calculating map')
 
     def fit(ydata):
         pm.increment()
-        return fitter(ydata)
+        return fitter(guess, x, ydata).params[1]
 
     res = np.apply_along_axis(fit, 0, images)
     pm.finishSuccess()
