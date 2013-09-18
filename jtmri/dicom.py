@@ -1,18 +1,55 @@
-import struct
-import logging
-import re
-import collections
-from pprint import pprint
+from __future__ import absolute_import
 from glob import glob
+import numpy as np
 import os
 import dicom
-import pandas as pd
+import logging
+from collections import defaultdict, Iterable
+from prettytable import PrettyTable
+from .siemens import SiemensProtocol
+from .utils import unique
 
 log = logging.getLogger('jtmri:dicom')
 
-_default_headers = ('PatientName', 'SeriesNumber', 'SeriesDescription')
+
+class DicomParser(object):
+    @staticmethod
+    def to_dict(dcm):
+        d = _dicomToDict(dcm)
+        d['SiemensProtocol'] = SiemensProtocol.fromDicom(dcm)
+        return d
+
+    def _convert(self,val):
+        if isinstance(val, list):
+            val = map(self.convert, val)
+        elif isinstance(val, dicom.valuerep.DSfloat):
+            val = float(val)
+        elif isinstance(val, dicom.valuerep.IS):
+            val = int(val)
+        elif isinstance(val, dicom.UID.UID):
+            val = str(val)
+        else:
+            val = str(val)
+        return val
+
+    def _dicom_to_dict(dcm):
+        d = {}
+        for tag in dcm.keys():
+            elem = dcm[tag]
+            key = dicom.datadict.keyword_for_tag(tag)
+            val = elem.value
+            if tag != (0x7fe0, 0x0010):
+                if isinstance(val, dicom.sequence.Sequence):
+                    val = [_dicomToDict(ds) for ds in val]
+                else:
+                    val = convert(val)
+                d[key] = val
+        return d
+
+
 
 def isdicom(path):
+    '''Check if path is a dicom file'''
     isdcm = False
     if os.path.isfile(path):
         with open(path,'r') as fp:
@@ -21,172 +58,127 @@ def isdicom(path):
             isdcm = (magic == b"DICM")
     return isdcm
 
-def read(path, extraHeaders=tuple()):
+
+def read(path=None):
+    '''Read dicom files from the path
+
+    Args:
+        path -- glob style path of dicom files, if a dir then all files in dir are added
+
+    Returns:
+        A list of dicom objects
+    '''
+    path = path if path else os.path.abspath(os.path.curdir)
+
     if os.path.isdir(path):
         path = os.path.join(path, '*') 
     paths = glob(path)
 
-    headers = _default_headers + extraHeaders
-    dcms = [dicom.read_file(path) for path in paths if isdicom(path)]
-    data = [[dcm.get(h) for h in headers] for dcm in dcms]
-    df = pd.DataFrame.from_records(data, columns=headers)
-    df.sort(columns=headers, inplace=True)
-    return df
-
-def ls(path=None, extraHeaders=tuple()):
-    '''Given glob like path, list the dicoms in a given directory, or
-    the current one is no arguments are given'''
-    path = path if path else os.path.abspath(os.path.curdir)
-
-    df = read(path, extraHeaders)
-    df.drop_duplicates(inplace=True)
-    print(df.to_string(index=False))
-
-def _null_truncate(s):
-    """Given a string, returns a version truncated at the first '\x00' if
-    there is one. If not, the original string is returned.
-    
-    [Taken from VESPA project http://scion.duhs.duke.edu/vespa]
-    """
-    i = s.find(chr(0))
-    if i != -1:
-        s = s[:i]
-    return s
+    return [dicom.read_file(path) for path in paths if isdicom(path)]
 
 
-def _scrub(item):
-    """Given a string, returns a version truncated at the first '\x00' and
-    stripped of leading/trailing whitespace. If the param is not a string,
-    it is returned unchanged.
-    
-    [Taken from VESPA project http://scion.duhs.duke.edu/vespa]
-    """
-    if isinstance(item, basestring):
-        return _null_truncate(item).strip()
+def data(dicoms):
+    '''Get the pixel array from each dicom and concatentate them together
+
+    Args:
+        dicoms -- a iterable of dicoms
+
+    Returns:
+        numpy array of all the pixel arrays concatenated along the third dimension.
+        If they are all the same shape then a simple array is returned,
+        if they are not then a record array is returned.
+    '''
+    arrays = []
+    for dcm in dicoms:
+        array.append(dcm.pixel_array)
+    return np.array(arrays)
+
+
+def groupby(dicoms, key=lambda x: x, sort=True):
+    '''Group dicoms together by key, no presorting necessary
+
+    Args:
+        dicoms  -- an iterable of dicoms
+        key     -- a callable or an object to use as a key
+        sort    -- sort the groups by key
+
+    Returns:
+        A list of tuples with the structure [(key0, group0), (key1, group1), ...]
+
+    Examples:
+        >>> # Group by the key SeriesNumber
+        >>> groupby(dicoms, 'SeriesNumber')
+        [(0, [dcm1, dcm2, ...]), (1, [dcm3, dcm4]), (2, [dcm5, dcm6]), ...]
+
+        >>> # Groupy by the key StudyInstanceUID then SeriesInstanceUID
+        >>> groupby(dicoms, ('StudyInstanceUID', 'SeriesInstanceUID'))
+        [(0, [(0, [dcm1]), (1, [dcm2])]), (1, [(0, [dcm3]), (1, [dcm4])])]
+
+        >>> # Group even and odd SeriesNumbers
+        >>> groupby(dicoms, lambda x: x.SeriesNumber % 2 == 0)
+        [(True, [dcm1, dcm2, dcm5, dcm6, ...]), (False, [dcm3, dcm4, dcm7, dcm8, ...])]
+    '''
+    keyfunc = None
+    extrakeys = None
+    if callable(key):
+        keyfunc = key
     else:
-        return item
+        if isinstance(key, Iterable) and not isinstance(key, str):
+            key,extrakeys = key[0],key[1:]
+        keyfunc = lambda x, key=key: x.get(key)
 
-
-def _get_chunks(tag, index, format, little_endian = True):
-    """Given a CSA tag string, an index into that string, and a format
-    specifier compatible with Python's struct module, returns a tuple
-    of (size, chunks) where size is the number of bytes read and
-    chunks are the data items returned by struct.unpack(). Strings in the
-    list of chunks have been run through _scrub().
+    d = defaultdict(list)
+    for dcm in dicoms:
+        d[keyfunc(dcm)].append(dcm)
     
-    [Taken from VESPA project http://scion.duhs.duke.edu/vespa]
-    """
-    format = ('<' if little_endian else '>') + format
-    size = struct.calcsize(format)
-    chunks = struct.unpack(format, tag[index:index + size])
-    chunks = [ _scrub(item) for item in chunks ]
-    return (size, chunks)
+    items = []
+    for k,v in sorted(d.items(), key=lambda x: x[0]):
+        if extrakeys:
+            items.append((k, groupby(v, extrakeys)))
+        else:
+            items.append((k, v))
+    return tuple(items)
 
 
-def _parse_csa_header(tag, little_endian = True):
-    """The CSA header is a Siemens private tag that should be passed as
-    a string. Any of the following tags should work: (0x0029, 0x1010),
-    (0x0029, 0x1210), (0x0029, 0x1110), (0x0029, 0x1020), (0x0029, 0x1220),
-    (0x0029, 0x1120).
+def ls(path=None, headers=tuple()):
+    '''Read dicom files from path and print a summary
     
-    The function returns a dictionary keyed by element name.
-    
-    [Taken from VESPA project http://scion.duhs.duke.edu/vespa]
-    """
-    DELIMITERS = ('M', '\xcd', 77, 205)
-    elements = {}
-    current = 0
-    size, chunks = _get_chunks(tag, current, '4s4s')
-    current += size
-    assert chunks[0] == 'SV10'
-    assert chunks[1] == '\x04\x03\x02\x01'
-    size, chunks = _get_chunks(tag, current, 'L')
-    current += size
-    element_count = chunks[0]
-    size, chunks = _get_chunks(tag, current, '4s')
-    current += size
-    assert chunks[0] in DELIMITERS
-    for i in range(element_count):
-        size, chunks = _get_chunks(tag, current, '64s4s4s4sL4s')
-        current += size
-        name, vm, vr, syngo_dt, subelement_count, delimiter = chunks
-        assert delimiter in DELIMITERS
-        values = []
-        for j in range(subelement_count):
-            size, chunks = _get_chunks(tag, current, '4L')
-            current += size
-            assert chunks[0] == chunks[1]
-            assert chunks[1] == chunks[3]
-            assert chunks[2] in DELIMITERS
-            length = chunks[0]
-            size, chunks = _get_chunks(tag, current, '%ds' % length)
-            current += size
-            if chunks[0]:
-                values.append(chunks[0])
-            current += (4 - length % 4) % 4
+    Args:
+        path    -- glob like path of dicom files, if None then the current dir is used
+        headers -- headers to use in summary in addition to the default ones
 
-        if len(values) == 0:
-            values = ''
-        if len(values) == 1:
-            values = values[0]
-        assert name not in elements
-        elements[name] = values
-
-    return elements
+    Returns:
+        A list of dicom objects
+        Prints a summary of the dicom objects
+    '''
+    dicoms = read(path)
+    disp(dicoms, headers)
+    return dicoms
 
 
-class SiemensProtocol(object):
-    @staticmethod
-    def fromDicom(dicom):
-        seriesData = _parse_csa_header(dicom[(0x0029, 0x1020)])
-        protocolRaw = seriesData['MrPhoenixProtocol']
-        protocol = SiemensProtocol(protocolRaw).asDict()
-        seriesData['MrPhoenixProtocol'] = protocol
-        return seriesData
+def disp(dicoms, headers=tuple()):
+    '''Display an iterable of dicoms, removing redundant information
 
-    def __init__(self, protocolStr):
-        startToken = '### ASCCONV BEGIN ###'
-        endToken = '### ASCCONV END ###'
-        start = protocolStr.find(startToken) + len(startToken) 
-        end = protocolStr.find(endToken) - 1
-        self._rawProtocol = protocolStr[start:end].split('\n')
-        if self._rawProtocol[0] == '':
-            self._rawProtocol = self._rawProtocol[1:]
+    Args:
+        dicoms  -- iterable of dicoms
+        headers -- additional headers to display data for
 
-    def asDict(self):
-        return self._parse()
+    Returns:
+        Returns nothing.
+        Prints a summary of the dicom data
+    '''
+    _headers = ('SeriesNumber', 'SeriesDescription','RepetitionTime') + headers
 
-    def _splitLines(self):
-        for line in self._rawProtocol:
-            splitLine = line.split('=')
-            if len(splitLine) == 2:
-                yield splitLine
-            else:
-                log.warn('Line ['+repr(line)+'] is missing the split token (=)')
-
-
-    def _parse(self):
-        arrayPattern = re.compile(r'(\w+)\[(\d+)\]')
-        proto = {}
-        
-        def nameGen(key):
-            for name in key.strip().split('.'):
-                match = arrayPattern.match(name)
-                if match:
-                    prefix,idx = match.groups()
-                    yield prefix
-                    yield idx
-                else:
-                    yield name
-
-        for key,val in self._splitLines():
-            val = val.strip()
-            d = d_prev = proto
-            for name in nameGen(key):
-                if name not in d:
-                    d[name] = {}
-                d_prev = d
-                d = d[name]
-            d_prev[name] = val
-        return proto
-
+    # Groupby Patient, StudyInstanceUID, SeriesInstanceUID
+    summary = ''
+    for patientName,studies in groupby(dicoms, ('PatientName', 'StudyID', 'SeriesNumber')):
+        for studyID,series in studies:
+            t = PrettyTable(_headers)
+            t.align = 'l'
+            rows = tuple(tuple(dcms[0].get(h) for h in _headers) for seriesNum,dcms in series)
+            for row in unique(rows):
+                t.add_row(row)
+            summary += 'Patient: %s\n' % patientName
+            summary += 'Study: %s\n' % studyID
+            summary += '%s\n\n' % t
+    print(summary)
