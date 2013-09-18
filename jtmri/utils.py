@@ -159,6 +159,12 @@ def readDSV(filename):
         dsv['values'] = values
         return dsv 
 
+def unique(seq):
+    '''find unique elements in iterable while preserving order'''
+    seen = set()
+    seen_add = seen.add
+    return [ x for x in seq if x not in seen and not seen_add(x)]
+
 
 def interleave(*args):
     '''Interleave two or more lists into a single list.
@@ -178,3 +184,28 @@ def extract(m, thresh=0):
     all values > thresh'''
     indx = [slice(a.min(),a.max()+1) for a in (m > thresh).nonzero()]
     return m[indx]
+
+class AttributeDict(object):
+    def __init__(self, *args, **kwargs):
+        self._dict = dict(*args, **kwargs)
+    
+    def __dir__(self):
+        return sorted(set(dir(type(self)) + self._dict.keys()))
+
+    def __getitem__(self, key):
+        return self._dict[key]
+
+    def __getattr__(self, key):
+        return self._dict[key]
+
+    def keys(self):
+        return self._dict.keys()
+
+    def values(self):
+        return self._dict.values()
+
+    def __repr__(self):
+        return 'AttributeDict(' + self._dict.__repr__() + ')'
+        
+
+
