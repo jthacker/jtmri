@@ -1,4 +1,5 @@
 import struct
+import re
 from collections import namedtuple
 
 _mdhFields = (

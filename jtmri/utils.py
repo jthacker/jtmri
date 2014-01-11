@@ -1,46 +1,55 @@
-import numpy as np
-import pylab as plt
-import sys
-import logging
-import csv
-import re
-import itertools
+import numpy as np 
+import pylab as plt 
+import os, sys, logging, csv, re, itertools, collections
 
 log = logging.getLogger('jtmri.utils')
+
 
 class ProgressMeter(object):
     '''Displays a CLI progress meter.
     maxVal is the final value of the parameter being incremented.
     msg will be displayed while the meter is progressing.'''
 
-    def __init__(self, maxVal, msg):
+    def __init__(self, count, msg, width=30):
+        # Progress is in the range [0, count)
         self._progress = 0
-        self._max = float(maxVal)
+        self._max = float(count) - 1
         self._msg = msg
+        self._width = width
+        self._finished = False
 
-    def _display(self):
-        i = 100 * (self._progress / self._max)
-        sys.stdout.write("\r%s - %d%%" % (self._msg, i))
-        sys.stdout.flush()
-
+    def _display(self, msg):
+        if not self._finished:
+            sys.stdout.write('\x1b[2K') # Delete current line
+            progress = self._progress / self._max
+            progressStr = '#'*int(round(progress*self._width)) + ' '*int(round((1-progress)*self._width))
+            sys.stdout.write("\r[%s] %3d%% -- %s" % (progressStr, 100*progress, msg))
+            sys.stdout.flush()
+        
     def _end(self, msg):
         '''Call this if the task finishes earlier than expected'''
-        self._display()
-        sys.stdout.write(" -- %s\n" % msg)
-        sys.stdout.flush()
+        self._progress = self._max
+        self._display(msg+'\n')
+
+    def setprogress(self, progress):
+        assert 0 <= progress <= 1, 'progress must be in the range [0,1]'
+        self._progress = int(progress * self._max)
+        self._display(self._msg)
 
     def increment(self):
         '''Increment the internal value and update the display'''
-        assert self._progress < self._max, "The progress (%d) should not be bigger than the max value (%d), the class was initialized incorrectly." % (self._progress, self._max)
-        self._progress += 1
-        self._display() 
+        if self._progress < self._max:
+            self._progress += 1
+            self._display(self._msg) 
+        else:
+            self.finished()
 
-    def finishSuccess(self):
+    def finished(self):
         '''Call this if the task finishes succssefully earlier than expected'''
         self._progress = self._max
-        self._end("Finished!")
+        self._end("Finished!\n")
 
-    def error(self, msg="Error!"):
+    def error(self, msg="Error!\n"):
         '''Call this if the task errors out'''
         self._end(msg) 
 
@@ -159,6 +168,7 @@ def readDSV(filename):
         dsv['values'] = values
         return dsv 
 
+
 def unique(seq):
     '''find unique elements in iterable while preserving order'''
     seen = set()
@@ -179,15 +189,18 @@ def chunks(l, n):
     for i in xrange(0, len(l), n):
         yield l[i:i+n]
 
+
 def extract(m, thresh=0):
     '''Find the smallest rectangular region in the matrix that can hold
     all values > thresh'''
     indx = [slice(a.min(),a.max()+1) for a in (m > thresh).nonzero()]
     return m[indx]
 
+
 class AttributeDict(object):
+    '''A dictionary that can have its keys accessed as if they are attributes'''
     def __init__(self, *args, **kwargs):
-        self._dict = dict(*args, **kwargs)
+        self.__dict__['_dict'] = dict(*args, **kwargs)
     
     def __dir__(self):
         return sorted(set(dir(type(self)) + self._dict.keys()))
@@ -195,8 +208,17 @@ class AttributeDict(object):
     def __getitem__(self, key):
         return self._dict[key]
 
+    def __setitem__(self, key, val):
+        self._dict[key] = val
+
     def __getattr__(self, key):
         return self._dict[key]
+
+    def __setattr__(self, key, val):
+        self._dict[key] = val
+    
+    def get(self, key, default=None):
+        return self._dict.get(key, default)
 
     def keys(self):
         return self._dict.keys()
@@ -204,8 +226,27 @@ class AttributeDict(object):
     def values(self):
         return self._dict.values()
 
-    def __repr__(self):
-        return 'AttributeDict(' + self._dict.__repr__() + ')'
+    def __str__(self):
+        return 'AttributeDict(' + str(self._dict) + ')'
         
 
+def asiterable(val):
+    if not isinstance(val, collections.Iterable):
+        return [val]
+    else:
+        return val
 
+
+def first(iterable, default=None, key=lambda x: True):
+    '''Returns the first item in the iterable
+    Args:
+    default -- default value to return if there is not first element
+    key     -- (callable) return the first element that satisfies the key func
+
+    Returns:
+    The first element to satisfy the key function or *default*.
+    '''
+    for el in iterable:
+        if key(el):
+            return el
+    return default
