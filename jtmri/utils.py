@@ -22,8 +22,9 @@ class ProgressMeter(object):
         if not self._finished:
             sys.stdout.write('\x1b[2K') # Delete current line
             progress = self._progress / self._max
-            progressStr = '#'*int(round(progress*self._width)) + ' '*int(round((1-progress)*self._width))
-            sys.stdout.write("\r[%s] %3d%% -- %s" % (progressStr, 100*progress, msg))
+            progressStr = '#'*int(round(progress*self._width)) 
+            progressStr += ' '*int(round((1-progress)*self._width))
+            sys.stdout.write("\r[%s] %4.1f%% -- %s" % (progressStr, 100*progress, msg))
             sys.stdout.flush()
         
     def _end(self, msg):
@@ -33,8 +34,11 @@ class ProgressMeter(object):
 
     def setprogress(self, progress):
         assert 0 <= progress <= 1, 'progress must be in the range [0,1]'
-        self._progress = int(progress * self._max)
-        self._display(self._msg)
+        if progress == 1:
+            self.finished()
+        else:
+            self._progress = int(progress * self._max)
+            self._display(self._msg)
 
     def increment(self):
         '''Increment the internal value and update the display'''
@@ -47,9 +51,9 @@ class ProgressMeter(object):
     def finished(self):
         '''Call this if the task finishes succssefully earlier than expected'''
         self._progress = self._max
-        self._end("Finished!\n")
+        self._end("Finished!")
 
-    def error(self, msg="Error!\n"):
+    def error(self, msg="Error!"):
         '''Call this if the task errors out'''
         self._end(msg) 
 
@@ -235,18 +239,3 @@ def asiterable(val):
         return [val]
     else:
         return val
-
-
-def first(iterable, default=None, key=lambda x: True):
-    '''Returns the first item in the iterable
-    Args:
-    default -- default value to return if there is not first element
-    key     -- (callable) return the first element that satisfies the key func
-
-    Returns:
-    The first element to satisfy the key function or *default*.
-    '''
-    for el in iterable:
-        if key(el):
-            return el
-    return default
