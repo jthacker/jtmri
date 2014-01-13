@@ -13,7 +13,7 @@ from .utils import unique, AttributeDict, ProgressMeter
 try:
     import arrview
 except:
-    print('arrview module not found! Viewing arrays will not work without it.')
+    print('Missing arrview module. view methods will not work without it.')
 
 log = logging.getLogger('jtmri:dicom')
 
@@ -21,7 +21,7 @@ class DicomParser(object):
     @staticmethod
     def to_dict(dcm):
         d = DicomParser._dicom_to_dict(dcm)
-        d['SiemensProtocol'] = SiemensProtocol.fromDicom(dcm)
+        d['Siemens'] = SiemensProtocol.fromDicom(dcm)
         d['pixel_array'] = dcm.pixel_array
         return d
     
@@ -41,7 +41,7 @@ class DicomParser(object):
 
     @staticmethod
     def _dicom_to_dict(dcm):
-        d = {}
+        d = AttributeDict()
         # :WARNING:
         # dcm must be iterated over in this manner with
         # the elem being accessed through __getitem__ because
@@ -50,14 +50,15 @@ class DicomParser(object):
         for tag in dcm.iterkeys():
             elem = dcm[tag]
             name = dicom.datadict.keyword_for_tag(tag)
-            val = elem.value
-            if tag != (0x7fe0, 0x0010):
-                if isinstance(val, dicom.sequence.Sequence):
-                    val = [DicomParser._dicom_to_dict(ds) for ds in val]
-                else:
-                    val = DicomParser._convert(val)
-                d[name] = val
-        return AttributeDict(d)
+            if name: # remove blank tags
+                val = elem.value
+                if tag != (0x7fe0, 0x0010):
+                    if isinstance(val, dicom.sequence.Sequence):
+                        val = [DicomParser._dicom_to_dict(ds) for ds in val]
+                    else:
+                        val = DicomParser._convert(val)
+                    d[name] = val
+        return d
 
 
 class DicomSet(object):
@@ -143,27 +144,24 @@ def groupby(dicoms, key=lambda x: x, sort=True):
     return tuple(items)
 
 
-
 def data(dicoms):
     '''Get the pixel array from each dicom and concatentate them together
     Args:
-    dicoms -- a iterable of dicoms
+    dicoms -- an iterable of dicoms
 
     Returns:
     numpy array of all the pixel arrays concatenated along the third dimension.
     If they are all the same shape then a simple array is returned,
     if they are not then a record array is returned.
     '''
-    out = np.array([d.pixel_array for d in dicoms])
-    if out.dtype != object:
-        out = out.astype(float)
-        locs = set([d.SliceLocation for d in dicoms])
-        sliceCount = len(locs)
-        s = out.shape
-        if s[0] % sliceCount == 0:
-            shape = (s[0] / sliceCount, sliceCount, s[1], s[2])
-            out = out.reshape(shape)
-    return out
+    arr = []
+    for loc,ds in groupby(dicoms, ('SliceLocation','InstanceNumber')):
+        inner = []
+        for num,dcms in ds:
+            assert len(dcms) == 1
+            inner.append(dcms[0].pixel_array)
+        arr.append(inner)
+    return np.array(arr).transpose(2,3,0,1)
 
 
 def read(path=None, progressfn=None):
@@ -190,7 +188,7 @@ def read(path=None, progressfn=None):
     return DicomSet(dicom_gen())
 
 
-def ls(path=None, headers=tuple(), progress=True):
+def ls(path=None, headers=tuple()):
     '''Read dicom files from path and print a summary
     Args:
     path    -- glob like path of dicom files, if None then the current dir is used
@@ -200,9 +198,8 @@ def ls(path=None, headers=tuple(), progress=True):
     A list of dicom objects
     Prints a summary of the dicom objects
     '''
-    if progress:
-        progressfn = lambda i,N: ProgressMeter.display(i,N,workingmsg='reading dicoms')
-    dicomSet = read(path, progressfn=progressfn)
+    progress = ProgressMeter(1000, 'reading dicoms')
+    dicomSet = read(path, progressfn=lambda i,n: progress.setprogress(i/float(n)))
     dicomSet.disp()
     return dicomSet
 
@@ -220,18 +217,22 @@ def disp(dicoms, headers=tuple()):
     '''
     _headers = ('SeriesNumber', 'SeriesDescription','RepetitionTime') + headers
 
-    # Groupby Patient, StudyInstanceUID, SeriesInstanceUID
-    for patientName,studies in groupby(dicoms, ('PatientName', 'StudyID', 'SeriesNumber')):
-        for studyID,series in studies:
-            t = PrettyTable(_headers + ('Count',))
-            t.align = 'l'
+    if len(dicoms) > 0:
+        # Groupby Patient, StudyInstanceUID, SeriesInstanceUID
+        groups = ('PatientName', 'StudyID', 'SeriesNumber')
+        for patientName,studies in groupby(dicoms, groups):
+            for studyID,series in studies:
+                t = PrettyTable(_headers + ('Count',))
+                t.align = 'l'
 
-            print('Patient: %s' % patientName)
-            print('Study: %s' % studyID)
-            for seriesNum,dcms in series:
-                row = [dcms[0].get(h) for h in _headers] + [len(dcms)]
-                t.add_row(row)
-            print('%s\n' % t)
+                print('Patient: %s' % patientName)
+                print('Study: %s' % studyID)
+                for seriesNum,dcms in series:
+                    row = [dcms[0].get(h) for h in _headers] + [len(dcms)]
+                    t.add_row(row)
+                print('%s\n' % t)
+    else:
+        print('Dicom list is empty')
 
 
 def view(dicoms):
