@@ -2,6 +2,8 @@ import struct
 import re
 from collections import namedtuple
 
+from .utils import AttributeDict
+
 _mdhFields = (
     ('FlagsAndDMALength'    ,0,   'L'),
     ('MeasUID'              ,4,   'l'),
@@ -187,7 +189,7 @@ class SiemensProtocol(object):
         protocolRaw = seriesData['MrPhoenixProtocol']
         protocol = SiemensProtocol(protocolRaw).asDict()
         seriesData['MrPhoenixProtocol'] = protocol
-        return seriesData
+        return AttributeDict(seriesData)
 
     def __init__(self, protocolStr):
         startToken = '### ASCCONV BEGIN ###'
