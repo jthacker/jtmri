@@ -4,8 +4,8 @@ import pylab as plt
 import logging
 import operator as op
 from scipy.optimize import curve_fit
-from jtmri.cache import memoize
-from jtmri.utils import ProgressMeter
+from .cache import memoize
+from .utils import ProgressMeter, rep
 
 log = logging.getLogger('jtmri.fitting')
 
@@ -35,17 +35,19 @@ class Fit(object):
     def plot(self, funcOvershoot=0.2):
         '''Plot the fitted parameters. The data points are placed and then the
         function is plotted over the x-range used during the inital fit.
-        
-        funcOvershoot: amount to extend the x range when plotting the fitted function'''
+        Args:
+        funcOvershoot -- amount to extend the x range when plotting 
+                         the fitted function
+        '''
 
         plt.figure()
-        title = 'Fit: ' + " ".join(["%s=%s" % (k,v) for k,v in self.paramDict.iteritems()])
+        title = 'Fit: '
+        title += " ".join(["%s=%s" % (k,v) for k,v in self.paramDict.iteritems()])
         title = title if self.success else "FAILED " + title
 
         plt.title(title)
         plt.plot(self.x, self.y, 'bo', label='data')
 
-        # Plot the fitted function with fixed sampling and a range extended by funcOvershoot
         xmin = self.x.min()
         xmax = self.x.max()
         overshoot = funcOvershoot * (xmax - xmin)
@@ -58,16 +60,19 @@ class Fit(object):
         plt.show()
 
     def __repr__(self):
-        return "Fit(x=%s, y=%s, func=%s, fittedParams=%s, covMatrix=%s, success=%s)" % (self.x, self.y, self.func, self.paramDict, self.covMatrix, self.success)
+        return rep(self, ('x','y','func','paramDict','covMatrix','success')
 
 
 class Fitter(object):
     def __init__(self, fitFunc, failedFitFunc=_minValueFailedFitFunc):
         '''Create a new Fitter object.
-        fitFunc should be of the form lambda xData, param0, param1, ... : function(xData, param0, param1, ...)
+        fitFunc should be of the form:
+            lambda xData, param0, ... : function(xData, param0, ...)
         The first argument should be the xData used for fitting.
-        The Fitter object will attempt to find estimates for rest of the specified parameters.
-        If the Fitter fails to find a fit, then failedFitFunc is called to get default values for those points.
+        The Fitter object will attempt to find estimates for rest 
+        of the specified parameters.
+        If the Fitter fails to find a fit, then failedFitFunc is 
+        called to get default values for those points.
         '''
         fitFuncArgs = inspect.getargspec(fitFunc).args
 
@@ -80,21 +85,25 @@ class Fitter(object):
         self._failedFitFunc = failedFitFunc
 
     def __call__(self, initialGuess, xdata, ydata):
-        '''Find estimates for the parameters of the fitFunc given the initalGuess, xdata and ydata.
-        Thie initalGuess is needed inorder for the nonlinear fitting function to converge.
-        It should be the same length as the number of parameters specifed in the fitFunc.'''
-
+        '''Find estimates for the parameters of the fitFunc given the 
+        initalGuess, xdata and ydata. Thie initalGuess is needed inorder 
+        for the nonlinear fitting function to converge. It should be the 
+        same length as the number of parameters specifed in the fitFunc.
+        '''
         xdata = np.array(xdata)
         ydata = np.array(ydata)
 
-        assert xdata.ndim == 1, "xdata must be one dimensional but has %d dimensions" % xdata.ndim
-        assert ydata.ndim == 1, "ydata must be one dimensional but has %d dimensions" % ydata.ndim
+        assert xdata.ndim == 1, "xdata must be 1D but has %d dims" % xdata.ndim
+        assert ydata.ndim == 1, "ydata must be 1D but has %d dims" % ydata.ndim
 
-        assert len(xdata) == len(ydata), "xdata and ydata must have the same length, %d != %d" % (len(xdata), len(ydata))
+        assert len(xdata) == len(ydata), \
+                "xdata and ydata must have the same length, %d != %d" % \
+                (len(xdata), len(ydata))
 
-        assert len(initialGuess) == len(self._paramsToFit), """len(initalGuess)=%d \
+        assert len(initialGuess) == len(self._paramsToFit), 'len(initalGuess)=%d \
             should equal the number of free parameters to be fit (%d) \
-            which were specified by the fitFunc""" % (len(initalGuess), len(self._paramsToFit))
+            which were specified by the fitFunc' % \
+            (len(initalGuess), len(self._paramsToFit))
 
         if np.isscalar(initialGuess):
             initialGuess = np.array(initialGuess)
@@ -105,7 +114,8 @@ class Fitter(object):
             popt,pcov = curve_fit(self._fitFunc, xdata, ydata, initialGuess)
         except RuntimeError as e:
             successfulFit = False
-            log.warn("Failed to find an appropriate fit, using the default value. %s" % e)
+            log.warn('Failed to find an appropriate fit, using the default')
+            log.debug(e)
             popt,pcov = self._failedFitFunc(initialGuess)
 
         if np.isscalar(pcov):
@@ -115,7 +125,8 @@ class Fitter(object):
             pcov = self._failedFitFunc(initialGuess)[1]
 
         fit = Fit(xdata, ydata, self._fitFunc, popt, pcov, successfulFit)
-        log.debug("Fit [%s] params = %s" % ('succeeded' if fit.success else 'FAILED', fit.paramDict))
+        status = 'succeeded' if fit.success else 'FAILED'
+        log.debug("Fit [%s] params = %s" % (status, fit.paramDict))
         return fit
 
 def fitMapper(fitter, images, x, guess):
