@@ -1,6 +1,5 @@
 import cPickle as pickle
 import numpy as np
-import redis
 from decorator import decorator
 from UserDict import DictMixin
 from hashlib import sha1
@@ -23,7 +22,8 @@ class Cache(DictMixin):
 
     def _stats(self):
         info = self._redis.info()
-        msg = "mem usage: %s (peak %s)" % (info['used_memory_human'], info['used_memory_peak_human'])
+        msg = "mem usage: %s (peak %s)" % \
+                (info['used_memory_human'], info['used_memory_peak_human'])
         return msg
 
     def _log(self, key, msg):
@@ -55,6 +55,7 @@ class Cache(DictMixin):
 
 DictProxyType = type(object.__dict__)
 
+# TODO: This function sucks
 def make_hash(o):
     """
     Makes a hash from a dictionary, list, tuple or set to any level, that 
@@ -75,7 +76,7 @@ def make_hash(o):
         for k, v in o.items():
             if not k.startswith("__"):
                 o2[k] = v
-        o = o2
+        o = opy2
 
     if isinstance(o, set) or isinstance(o, tuple) or isinstance(o, list):
         return tuple([make_hash(e) for e in o])
@@ -91,22 +92,38 @@ def make_hash(o):
 
     return hash(tuple(frozenset(o.items())))  
 
-    
-_cache = Cache()
+
+try:
+    import redis
+    _cache = Cache()
+except:
+    log.warn('redis module not installed, using local cache only')
+    _cache = {}
+
+
+def func_hash(func, args, kwargs):
+    '''hash a function and its arg and kwargs.
+    Uses just the byte code of the function for comparison so two different
+    functions that have the same bytecode will hash to the same function.
+    '''
+    keyHash = sha1(str(make_hash((func.__code__.co_code, args, kwargs))))
+    return keyHash.hexdigest()
+
 
 @decorator
-def memoize(func, *args, **kw):
-    '''Use this decorator to give you function persistent (across interpreter sessions, computers)
-    memoizing. If the same arguments are given to your function then this should result
-    in the same value being returned. For this reason, any function being memoized
-    should be a pure function with no side effects, at least you expect consistent
-    behaviour.
+def memoize(func, *args, **kwargs):
+    '''Use this decorator to give you function persistent 
+    across interpreter sessions. If the same arguments are 
+    given to your function then this should result in the 
+    same value being returned. For this reason, any function 
+    being memoized should be a pure function with no side effects, 
+    at least if you expect consistent behaviour.
     '''
-    keyHash = sha1(str(map(make_hash, (func.func_code.co_code, args, kw)))).hexdigest()
-    key = func.func_name + ':' + keyHash
+    fhash = func_hash(func, args, kwargs)
+    key = '%s:%s' % (func.func_name, fhash)
 
     if key in _cache:
-        return _cache[key]
+        result = _cache[key]
     else:
-        _cache[key] = result = func(*args, **kw)
-        return result
+        result = _cache[key] = func(*args, **kwargs)
+    return result
