@@ -239,3 +239,9 @@ def asiterable(val):
         return [val]
     else:
         return val
+
+
+def rep(obj, props):
+    s = obj.__class__.__name__
+    s += '(%s)' % ','.join(['%s=%r' % (prop,getattr(obj,prop)) for prop in props])
+    return s
