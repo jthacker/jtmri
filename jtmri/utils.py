@@ -10,13 +10,14 @@ class ProgressMeter(object):
     maxVal is the final value of the parameter being incremented.
     msg will be displayed while the meter is progressing.'''
 
-    def __init__(self, count, msg, width=30):
+    def __init__(self, count, msg='working', width=30):
         # Progress is in the range [0, count)
         self._progress = 0
         self._max = float(count) - 1
         self._msg = msg
         self._width = width
         self._finished = False
+        self._display(self._msg)
 
     def _display(self, msg):
         if not self._finished:
@@ -31,27 +32,27 @@ class ProgressMeter(object):
         '''Call this if the task finishes earlier than expected'''
         self._progress = self._max
         self._display(msg+'\n')
+        self._finished = True
 
     def setprogress(self, progress):
         assert 0 <= progress <= 1, 'progress must be in the range [0,1]'
         if progress == 1:
-            self.finished()
+            self.finish()
         else:
             self._progress = int(progress * self._max)
             self._display(self._msg)
 
     def increment(self):
         '''Increment the internal value and update the display'''
-        if self._progress < self._max:
+        if self._progress + 1 >= self._max:
+            self.finish()
+        else:
             self._progress += 1
             self._display(self._msg) 
-        else:
-            self.finished()
 
-    def finished(self):
+    def finish(self):
         '''Call this if the task finishes succssefully earlier than expected'''
-        self._progress = self._max
-        self._end("Finished!")
+        self._end('Finished!')
 
     def error(self, msg="Error!"):
         '''Call this if the task errors out'''
