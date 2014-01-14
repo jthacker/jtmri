@@ -39,7 +39,6 @@ class Fit(object):
         funcOvershoot -- amount to extend the x range when plotting 
                          the fitted function
         '''
-
         plt.figure()
         title = 'Fit: '
         title += " ".join(["%s=%s" % (k,v) for k,v in self.paramDict.iteritems()])
@@ -60,11 +59,11 @@ class Fit(object):
         plt.show()
 
     def __repr__(self):
-        return rep(self, ('x','y','func','paramDict','covMatrix','success')
+        return rep(self, ('x','y','func','paramDict','covMatrix','success'))
 
 
 class Fitter(object):
-    def __init__(self, fitFunc, failedFitFunc=_minValueFailedFitFunc):
+    def __init__(self, fitFunc, guess, failedFitFunc=_minValueFailedFitFunc):
         '''Create a new Fitter object.
         fitFunc should be of the form:
             lambda xData, param0, ... : function(xData, param0, ...)
@@ -79,12 +78,20 @@ class Fitter(object):
         assert len(fitFuncArgs) > 1, "The fitFunc should take at least 2 arguments\
             (the first is the xdata and the rest are parameters to be fit),\
             only %d specified." % len(fitFuncArgs)
+
+        self._paramsToFit = fitFuncArgs[1:]
+
+        assert len(guess) == len(self._paramsToFit), 'len(guess)=%d \
+            should equal the number of free parameters to be fit (%d)' % \
+            (len(guess), len(self._paramsToFit))
         
         self._fitFunc = fitFunc
-        self._paramsToFit = fitFuncArgs[1:]
+        if np.isscalar(guess):
+            guess = np.array(guess)
+        self._guess = guess
         self._failedFitFunc = failedFitFunc
 
-    def __call__(self, initialGuess, xdata, ydata):
+    def __call__(self, xdata, ydata):
         '''Find estimates for the parameters of the fitFunc given the 
         initalGuess, xdata and ydata. Thie initalGuess is needed inorder 
         for the nonlinear fitting function to converge. It should be the 
@@ -100,53 +107,49 @@ class Fitter(object):
                 "xdata and ydata must have the same length, %d != %d" % \
                 (len(xdata), len(ydata))
 
-        assert len(initialGuess) == len(self._paramsToFit), 'len(initalGuess)=%d \
-            should equal the number of free parameters to be fit (%d) \
-            which were specified by the fitFunc' % \
-            (len(initalGuess), len(self._paramsToFit))
-
-        if np.isscalar(initialGuess):
-            initialGuess = np.array(initialGuess)
-
         successfulFit = True
 
         try:
-            popt,pcov = curve_fit(self._fitFunc, xdata, ydata, initialGuess)
+            popt,pcov = curve_fit(self._fitFunc, xdata, ydata, self._guess)
         except RuntimeError as e:
             successfulFit = False
             log.warn('Failed to find an appropriate fit, using the default')
             log.debug(e)
-            popt,pcov = self._failedFitFunc(initialGuess)
+            popt,pcov = self._failedFitFunc(self._guess)
 
         if np.isscalar(pcov):
             successfulFit = False
             assert pcov == np.inf
             log.warn("Failed to find an appropriate fit, using the default value.")
-            pcov = self._failedFitFunc(initialGuess)[1]
+            pcov = self._failedFitFunc(self._guess)[1]
 
         fit = Fit(xdata, ydata, self._fitFunc, popt, pcov, successfulFit)
         status = 'succeeded' if fit.success else 'FAILED'
         log.debug("Fit [%s] params = %s" % (status, fit.paramDict))
         return fit
 
-def fitMapper(fitter, images, x, guess):
-    '''Fitter is a function that takes a numpy array of y values
-    and returns the parameter that was fit.
-    TODO: fit func needs to return the proper thing
-    '''
-    pm = ProgressMeter(reduce(op.mul, images[0].shape), 'Calculating map')
 
+def fitMapper(fitter, arr, axis=None):
+    '''Apply fitter function on arr
+    Args:
+    fitter -- a function that takes a numpy array of y values and 
+              returns the fit value of paramters.
+    arr    -- multi-dimenision array to fit over
+    axis   -- the axis to fit the data across
+    '''
+    if axis is None:
+        axis = arr.ndim - 1
+    total = reduce(op.mul, (d for i,d in enumerate(arr.shape) if i != axis))
+    pm = ProgressMeter(total, 'Calculating map')
     def fit(ydata):
         pm.increment()
-        return fitter(guess, x, ydata).params[1]
-
-    res = np.apply_along_axis(fit, 0, images)
-    pm.finishSuccess()
-    
+        return fitter(ydata)
+    res = np.apply_along_axis(fit, axis, arr)
+    pm.finish()
     return res
 
 
 ### Common Fitters ###
-r2Fitter = Fitter(lambda te, so, r2: so * np.exp(-1 * r2 * te))
-r2StarFitter = Fitter(lambda te, so, r2star: so * np.exp(-1 * r2star * te))
-r2PrimeFitter = Fitter(lambda tau, so, r2prime: so * np.exp(-2 * r2prime * tau))
+r2Fitter = Fitter(lambda te, so, r2: so * np.exp(-1 * r2 * te), (1,1))
+r2StarFitter = Fitter(lambda te, so, r2star: so * np.exp(-1 * r2star * te), (1,1))
+r2PrimeFitter = Fitter(lambda tau, so, r2prime: so * np.exp(-2 * r2prime * tau), (1,1))
