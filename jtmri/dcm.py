@@ -1,5 +1,5 @@
 from __future__ import absolute_import
-from glob import glob
+from glob import iglob
 import os, dicom, logging
 import numpy as np
 
@@ -8,20 +8,21 @@ from collections import defaultdict, Iterable
 from prettytable import PrettyTable
 
 from .siemens import SiemensProtocol
-from .utils import unique, AttributeDict, ProgressMeter
+from .utils import unique, AttributeDict, ProgressMeter, GenLen
 
-try:
-    import arrview
-except:
-    print('Missing arrview module. view methods will not work without it.')
+
 
 log = logging.getLogger('jtmri:dicom')
 
 class DicomParser(object):
     @staticmethod
-    def to_dict(dcm):
-        d = DicomParser._dicom_to_dict(dcm)
-        d['Siemens'] = SiemensProtocol.fromDicom(dcm)
+    def to_attributedict(dcm):
+        return DicomParser.to_dict(dcm, AttributeDict)
+
+    @staticmethod
+    def to_dict(dcm, wrap=dict):
+        d = DicomParser._dicom_to_dict(dcm, wrap)
+        d['Siemens'] = wrap(SiemensProtocol.from_dicom(dcm))
         d['pixel_array'] = dcm.pixel_array
         return d
     
@@ -40,8 +41,8 @@ class DicomParser(object):
         return val
 
     @staticmethod
-    def _dicom_to_dict(dcm):
-        d = AttributeDict()
+    def _dicom_to_dict(dcm, wrap):
+        d = {}
         # :WARNING:
         # dcm must be iterated over in this manner with
         # the elem being accessed through __getitem__ because
@@ -54,11 +55,11 @@ class DicomParser(object):
                 val = elem.value
                 if tag != (0x7fe0, 0x0010):
                     if isinstance(val, dicom.sequence.Sequence):
-                        val = [DicomParser._dicom_to_dict(ds) for ds in val]
+                        val = [DicomParser._dicom_to_dict(ds, wrap=lambda x:x) for ds in val]
                     else:
                         val = DicomParser._convert(val)
                     d[name] = val
-        return d
+        return wrap(d)
 
 
 class DicomSet(object):
@@ -164,7 +165,7 @@ def data(dicoms):
     return np.array(arr).transpose(2,3,0,1)
 
 
-def read(path=None, progressfn=None):
+def read(path, recursive=False):
     '''Read dicom files from the path
     Args:
     path -- glob style path of dicom files, if a dir then all files in dir are added
@@ -172,23 +173,32 @@ def read(path=None, progressfn=None):
     Returns:
     A list of dicom objects
     '''
-    path = path if path else os.path.abspath(os.path.curdir)
+    def path_gen():
+        if os.path.isdir(path):
+            path = os.path.join(path, '*') 
+        for p in iglob(path):
+            if isdicom(p):
+                yield p
 
-    if os.path.isdir(path):
-        path = os.path.join(path, '*') 
-    paths = glob(path)
+    def path_gen_recursive():
+        if os.path.isdir(path):
+            for root,_,files in os.walk(path):
+                for f in files:
+                    p = os.path.join(root,f)
+                    if isdicom(p):
+                        yield p
+        elif isdicom(path):
+            yield path
 
+    dcmPaths = list(path_gen_recursive() if recursive else path_gen())
     def dicom_gen():
-        dcmpaths = filter(isdicom, paths)
-        total = len(dcmpaths)
-        for i,dcmpath in enumerate(dcmpaths, 1):
-            if progressfn:
-                progressfn(i, total)
-            yield DicomParser.to_dict(dicom.read_file(dcmpath))
-    return DicomSet(dicom_gen())
+        for path in dcmPaths:
+            dcm = dicom.read_file(path)
+            yield DicomParser.to_attributedict(dcm)
+    return GenLen(dicom_gen(), len(dcmPaths))
 
 
-def ls(path=None, headers=tuple()):
+def ls(path=None):
     '''Read dicom files from path and print a summary
     Args:
     path    -- glob like path of dicom files, if None then the current dir is used
@@ -198,8 +208,17 @@ def ls(path=None, headers=tuple()):
     A list of dicom objects
     Prints a summary of the dicom objects
     '''
-    progress = ProgressMeter(1000, 'reading dicoms')
-    dicomSet = read(path, progressfn=lambda i,n: progress.setprogress(i/float(n)))
+    path = path if path else os.path.abspath(os.path.curdir)
+    
+    dcms = []
+    dicomGen = read(paths)
+    pm = ProgressMeter(len(dicomGen), 'reading dicoms')
+    for dcm in dicomGen:
+        pm.increment()
+        pm.append(dcm)
+    pm.finish()
+
+    dicomSet = DicomSet(dcms)
     dicomSet.disp()
     return dicomSet
 
@@ -236,5 +255,6 @@ def disp(dicoms, headers=tuple()):
 
 
 def view(dicoms):
+    import arrview
     arr = data(dicoms)
     return arrview.view(arr)
