@@ -10,53 +10,51 @@ class ProgressMeter(object):
     maxVal is the final value of the parameter being incremented.
     msg will be displayed while the meter is progressing.'''
 
-    def __init__(self, count, msg='working', width=30):
+    def __init__(self, count, msg='working', width=20):
         # Progress is in the range [0, count)
+        self._fd = sys.stderr
         self._progress = 0
-        self._max = float(count) - 1
+        self._count = float(count)
         self._msg = msg
         self._width = width
         self._finished = False
+        self._errorCount = 0
         self._display(self._msg)
 
     def _display(self, msg):
-        if not self._finished:
-            sys.stdout.write('\x1b[2K') # Delete current line
-            progress = self._progress / self._max
-            progressStr = '#'*int(round(progress*self._width)) 
-            progressStr += ' '*int(round((1-progress)*self._width))
-            sys.stdout.write("\r[%s] %4.1f%% -- %s" % (progressStr, 100*progress, msg))
-            sys.stdout.flush()
+        self._fd.write('\x1b[2K') # Delete current line
+        if self._count != 0:
+            progress = self._progress / self._count
+        else:
+            progress = 1.0
+        markerWidth = int(progress*self._width)
+        progressStr =  '#' * markerWidth
+        progressStr += ' ' * (self._width - markerWidth)
+        self._fd.write("\r[%s] %4.1f%% -- %s" % (progressStr, 100*progress, msg))
+        self._fd.flush()
         
     def _end(self, msg):
         '''Call this if the task finishes earlier than expected'''
-        self._progress = self._max
-        self._display(msg+'\n')
-        self._finished = True
-
-    def setprogress(self, progress):
-        assert 0 <= progress <= 1, 'progress must be in the range [0,1]'
-        if progress == 1:
-            self.finish()
-        else:
-            self._progress = int(progress * self._max)
-            self._display(self._msg)
+        self._progress = self._count
+        self._display('%s (errors: %d)\n' % (msg, self._errorCount))
 
     def increment(self):
         '''Increment the internal value and update the display'''
-        if self._progress + 1 >= self._max:
-            self.finish()
+        if self._progress + 1 >= self._count:
+            self._progress = self._count
         else:
             self._progress += 1
-            self._display(self._msg) 
+        self._display(self._msg) 
 
-    def finish(self):
+    def finish(self, success=True):
         '''Call this if the task finishes succssefully earlier than expected'''
-        self._end('Finished!')
+        msg = 'finished' if success else 'failed'
+        self._end('(%s) %s' % (msg, self._msg))
 
     def error(self, msg="Error!"):
-        '''Call this if the task errors out'''
-        self._end(msg) 
+        '''Call this if there is a recoverable error while procressing'''
+        self._errorCount += 1
+        self._display(msg)
 
 
 class DataObj(object):
@@ -221,6 +219,9 @@ class AttributeDict(object):
 
     def __setattr__(self, key, val):
         self._dict[key] = val
+
+    def __iter__(self):
+        return self._dict.__iter__()
     
     def get(self, key, default=None):
         return self._dict.get(key, default)
@@ -233,6 +234,13 @@ class AttributeDict(object):
 
     def __str__(self):
         return 'AttributeDict(' + str(self._dict) + ')'
+
+
+class DefaultAttributeDict(AttributeDict):
+    '''An AttriuteDict that returns attribute dicts that returns attribute dicts ...
+    when keys are missing'''
+    def __init__(self, *args, **kwargs):
+        self.__dict__['_dict'] = collections.defaultdict(DefaultAttributeDict, dict(*args, **kwargs))
         
 
 def asiterable(val):
@@ -246,3 +254,15 @@ def rep(obj, props):
     s = obj.__class__.__name__
     s += '(%s)' % ','.join(['%s=%r' % (prop,getattr(obj,prop)) for prop in props])
     return s
+
+
+class GenLen(object):
+    def __init__(self, iterator, length):
+        self._iterator = iterator
+        self._length = length
+
+    def __iter__(self):
+        return self._iterator
+
+    def __len__(self):
+        return self._length
