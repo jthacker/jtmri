@@ -2,8 +2,6 @@ import struct
 import re
 from collections import namedtuple
 
-from .utils import AttributeDict
-
 _mdhFields = (
     ('FlagsAndDMALength'    ,0,   'L'),
     ('MeasUID'              ,4,   'l'),
@@ -177,19 +175,19 @@ class SiemensProtocol(object):
     _dicom_tag = (0x0029, 0x1020)
 
     @staticmethod
-    def hasProtocol(dcm):
+    def has_protocol(dcm):
         '''Check if a dicom file has a Siemens Protocol embedded in it'''
         return SiemensProtocol._dicom_tag in dcm
 
     @staticmethod
-    def fromDicom(dcm):
-        if not SiemensProtocol.hasProtocol(dcm):
-            raise Exception('Dicom file does not have a Siemens Protocol in it')
-        seriesData = _parse_csa_header(dcm[SiemensProtocol._dicom_tag])
-        protocolRaw = seriesData['MrPhoenixProtocol']
-        protocol = SiemensProtocol(protocolRaw).asDict()
-        seriesData['MrPhoenixProtocol'] = protocol
-        return AttributeDict(seriesData)
+    def from_dicom(dcm):
+        seriesData = {}
+        if SiemensProtocol.has_protocol(dcm):
+            seriesData = _parse_csa_header(dcm[SiemensProtocol._dicom_tag])
+            protocolRaw = seriesData['MrPhoenixProtocol']
+            protocol = SiemensProtocol(protocolRaw).asDict()
+            seriesData['MrPhoenixProtocol'] = protocol
+        return seriesData
 
     def __init__(self, protocolStr):
         startToken = '### ASCCONV BEGIN ###'
