@@ -1,9 +1,10 @@
-import inspect
+import inspect, logging
+from collections import namedtuple
 import numpy as np
 import pylab as plt
-import logging
 import operator as op
 from scipy.optimize import curve_fit
+
 from .cache import memoize
 from .utils import ProgressMeter, rep
 
@@ -16,50 +17,39 @@ def _minValueFailedFitFunc(initialGuess):
     pcov[np.diag_indices_from(pcov)] = np.inf
     return popt,pcov
 
-class Fit(object):
-    def __init__(self, x, y, func, params, covMatrix, success):
-        self.x = x
-        self.y = y
-        self.func = func
-        self.params = params
-        self.covMatrix = covMatrix
-        self.success = success
+Fit = namedtuple('Fit', 'x y params paramdict func covmat success')
 
-        # First argument is the x-data, so throw it out
-        # The rest should be the parameters that were fit
-        funcArgs = inspect.getargspec(self.func).args
-        xName,paramNames = funcArgs[0],funcArgs[1:]
-        self._xlabel = xName
-        self.paramDict = dict(zip(paramNames, params))
 
-    def plot(self, funcOvershoot=0.2):
-        '''Plot the fitted parameters. The data points are placed and then the
-        function is plotted over the x-range used during the inital fit.
-        Args:
-        funcOvershoot -- amount to extend the x range when plotting 
-                         the fitted function
-        '''
-        plt.figure()
-        title = 'Fit: '
-        title += " ".join(["%s=%s" % (k,v) for k,v in self.paramDict.iteritems()])
-        title = title if self.success else "FAILED " + title
+def plot_fit(fit, ax=None, funcOvershoot=0.2):
+    '''Plot the fitted parameters. The data points are placed and then the
+    function is plotted over the x-range used during the inital fit.
+    Args:
+    funcOvershoot -- amount to extend the x range when plotting 
+                     the fitted function
+    '''
+    fig = None
+    if ax is None:
+        fig = plt.figure()
+        ax = fig.set_subplot(111)
+    title = " ".join(["%s=%0.3g" % (k,v) for k,v in fit.paramdict.iteritems()])
+    title = title if fit.success else "FAILED " + title
 
-        plt.title(title)
-        plt.plot(self.x, self.y, 'bo', label='data')
+    ax.set_title(title)
+    ax.plot(fit.x, fit.y, 'bo', label='data')
 
-        xmin = self.x.min()
-        xmax = self.x.max()
-        overshoot = funcOvershoot * (xmax - xmin)
-        xFunc = np.linspace(xmin - overshoot, xmax + overshoot, 100)
+    xmin = fit.x.min()
+    xmax = fit.x.max()
+    overshoot = funcOvershoot * (xmax - xmin)
+    xFunc = np.linspace(xmin - overshoot, xmax + overshoot, 100)
 
-        plt.plot(xFunc, self.func(xFunc, *self.params), 'r-', label='fit')
-        plt.xlabel(self._xlabel)
-        plt.grid()
-        plt.legend()
-        plt.show()
+    ax.plot(xFunc, fit.func(xFunc, *fit.params), 'r-', label='fit')
+    ax.set_xlabel('x')
+    ax.grid()
 
-    def __repr__(self):
-        return rep(self, ('x','y','func','paramDict','covMatrix','success'))
+    if fig is not None:
+        fig.show()
+
+    return ax
 
 
 class Fitter(object):
@@ -122,10 +112,14 @@ class Fitter(object):
             assert pcov == np.inf
             log.warn("Failed to find an appropriate fit, using the default value.")
             pcov = self._failedFitFunc(self._guess)[1]
+        
+        funcArgs = inspect.getargspec(self._fitFunc).args
+        xName,paramNames = funcArgs[0],funcArgs[1:]
+        paramdict = dict(zip(paramNames, popt))
 
-        fit = Fit(xdata, ydata, self._fitFunc, popt, pcov, successfulFit)
+        fit = Fit(xdata, ydata, popt, paramdict, self._fitFunc, pcov, successfulFit)
         status = 'succeeded' if fit.success else 'FAILED'
-        log.debug("Fit [%s] params = %s" % (status, fit.paramDict))
+        #log.debug("Fit [%s] params = %s" % (status, fit.paramDict))
         return fit
 
 
@@ -139,7 +133,7 @@ def fitMapper(fitter, arr, axis=None):
     '''
     if axis is None:
         axis = arr.ndim - 1
-    total = reduce(op.mul, (d for i,d in enumerate(arr.shape) if i != axis))
+    total = reduce(op.mul, (d for i,d in enumerate(arr.shape) if i != axis), 1)
     pm = ProgressMeter(total, 'Calculating map')
     def fit(ydata):
         pm.increment()
