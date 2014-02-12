@@ -1,6 +1,8 @@
 import struct
 import re
 from collections import namedtuple
+import logging
+log = logging.getLogger()
 
 _mdhFields = (
     ('FlagsAndDMALength'    ,0,   'L'),
@@ -234,4 +236,95 @@ class SiemensProtocol(object):
                 d = d[name]
             d_prev[name] = val
         return proto
+
+
+
+def _decompressValues(vals):
+    i = 0
+    N = len(vals)
+    while i < N:
+        if N - i >= 3:
+            v,vn,vnn = vals[i:i+3]
+            if vn == v:
+                yield v
+                yield vn 
+                for _ in xrange(vnn):
+                    yield v
+                i += 3
+            else:
+                yield vals[i]
+                i += 1
+        else:
+            yield vals[i]
+            i += 1
+
+
+def readDSV(filename):
+    '''Read a Siemens DSP-simulator DSV file. 
+    Decompresses the data in the [VALUES] section then return it as a dictionary'''
+    sectionRegex = re.compile(r'\[(.*)\]')
+    keyValPairRegex = re.compile(r'(.*)=(.*)')
+
+    dsv = {}
+
+    with open(filename) as f:
+        # 1: Read and parse the configuration until the VALUES section is reached
+        section = None
+        for line in f:
+            if line[0] == ';': # Ignore lines starting with a comma
+                continue
+
+            sectionMatch = sectionRegex.match(line)
+
+            # If the line represents a new section, then update the section
+            if sectionMatch:
+                section = sectionMatch.groups()[0].lower()
+                log.debug("Parsing [%s] Section" % section.upper())
+                dsv[section] = {}
+                if section == 'values':
+                    break
+                else:
+                    continue
+
+            keyValMatch = keyValPairRegex.match(line)
+            if keyValMatch:
+                key,val = keyValMatch.groups()
+                try:
+                    val = float(val)
+                except ValueError:
+                    val = val.strip()
+                dsv[section][key.lower()] = val
+
+        assert 'definitions' in dsv.keys(), 'No [DEFINITIONS] section was found'
+        definitions = dsv['definitions']
+        
+        assert section == 'values', \
+            "No [VALUES] section was found. Last section seen %s. Configuration so far %s" % (section, dsv)
+
+        # 2: Read all the data from the values section
+        rawValues = []
+        for line in f:
+            if line[0] == ';': # Ignore lines starting with a comma
+                continue
+            rawValues.append(line)
+        # Remove the last line since it is a blank line
+        rawValues = np.array(rawValues[:-1], dtype=int)
+        rawValuesLen = rawValues.size
+        
+        # 3: Decompress and scale the values.
+        # Decompress. 0 0 3 -> 0 0 0 0 0
+        # Convert from deltas to real values
+        # Scalesby the vertfactor
+        values = np.array(list(_decompressValues(rawValues))).cumsum() / definitions['vertfactor']
+        
+        log.debug("Found %d raw values and %d decompressed values." % (rawValuesLen, values.size))
+
+        expectedSamples = definitions['samples']
+        assert values.size == expectedSamples, \
+                "The number of decompressed values, %d, should be the same as " + \
+                "the number of data points defined in the header, %d." % (values.size, expectedSamples)
+        
+        dsv['values'] = values
+        return dsv 
+
 

@@ -6,13 +6,14 @@ import numpy as np
 from itertools import ifilter
 from collections import defaultdict, Iterable
 from prettytable import PrettyTable
+from tqdm import tqdm
 
 from .siemens import SiemensProtocol
-from .utils import unique, AttributeDict, ProgressMeter, GenLen
-
+from .utils import unique, AttributeDict, ListAttrAccess
 
 
 log = logging.getLogger('jtmri:dicom')
+
 
 class DicomParser(object):
     @staticmethod
@@ -66,17 +67,30 @@ class DicomSet(object):
     def __init__(self, dcms):
         self._dcms = list(dcms)
 
-    def series(self, *nums):
+    @property
+    def all(self):
+        '''Access an attribute from all objects in this set'''
+        return ListAttrAccessor(self) 
+
+    def by_series(self, *nums):
         return DicomSet(ifilter(lambda d: d.SeriesNumber in nums, self))
+
+    def series(self):
+        for num in unique(self.all.SeriesNumber):
+            yield self.by_series(num)
 
     def disp(self):
         disp(self)
 
-    def data(self):
-        return data(self)
+    def data(self, groupby=tuple()):
+        return data(self, field='pixel_array', groupby=groupby)
 
-    def view(self):
-        return view(self)
+    def view(self, groupby=tuple()):
+        return view(self, groupby=groupby)
+
+    @property
+    def count(self):
+        return len(self)
 
     def __iter__(self):
         return iter(self._dcms)
@@ -145,87 +159,104 @@ def groupby(dicoms, key=lambda x: x, sort=True):
     return tuple(items)
 
 
-def data(dicoms):
-    '''Get the pixel array from each dicom and concatentate them together
+def _newshape(initialshape, keys, groupby):
+    newshape = list(initialshape)
+    for i,s in enumerate(groupby):
+        if s == '*':
+            newshape.append(-1)
+        else:
+            newshape.append(len(set(k[i] for k in keys)))
+    return tuple(newshape)
+
+
+def data(iterable, field, groupby=tuple(), reshape=True):
+    '''Get the field attribute from all objects, grouping and reshaping if specified
     Args:
-    dicoms -- an iterable of dicoms
+    field   -- Name of a field on the object to get value from
+    groupby -- A list or tuple of fields to group the data with
+    reshape -- (default True) Reshape the data if specified
 
     Returns:
-    numpy array of all the pixel arrays concatenated along the third dimension.
-    If they are all the same shape then a simple array is returned,
-    if they are not then a record array is returned.
+    A numpy array grouped by groupby and reshaped to fit if specified.
+    If reshape is False, then data will be appended on the last
+    dimension (second dimension for 1D data and third for 3D data), 
+    and sorted by the groupby fields.
+
+    If the data from all the objects in the set do not have the same 
+    dimensions then this method will fail. Instead, 
+    use [o.field for o in subset] to get a list.
+
+    Examples for a set of dicoms with 5 SliceLocations and 3 
+    images at each location
+    >>> # Now apply data to all dicoms in the set
+    >>> data(dcms, field='pixel_array').shape
+    (64,64,15)
+    >>> data(dcms, field='pixel_array', groupby=('SliceLocation',)).shape
+    (64,64,5,3)
     '''
-    arr = []
-    for loc,ds in groupby(dicoms, ('SliceLocation','InstanceNumber')):
-        inner = []
-        for num,dcms in ds:
-            assert len(dcms) == 1
-            inner.append(dcms[0].pixel_array)
-        arr.append(inner)
-    return np.array(arr).transpose(2,3,0,1)
+    groupby = tuple(groupby)
+    obj = list(iterable)
+    if len(obj) > 0:
+        groupby = groupby + ('*',) if '*' not in groupby else groupby
+        key = lambda i,d: [i if s=='*' else d[s] for s in groupby]
+        arraykeys = ((getattr(d, field),key(i,d)) for i,d in enumerate(obj))
+        arrays, keys = zip(*sorted(arraykeys, key=lambda d: d[1]))
+        shape = tuple() if not hasattr(arrays[0], 'shape') else arrays[0].shape
+        newshape = _newshape(shape, keys, groupby)
+        arrays = np.dstack(arrays)
+        return arrays.reshape(newshape) if reshape else arrays
+    else:
+        return np.array([])
 
 
-def read(path, recursive=False):
-    '''Read dicom files from the path
-    Args:
-    path -- glob style path of dicom files, if a dir then all files in dir are added
-
-    Returns:
-    A list of dicom objects
-    '''
-    def path_gen():
-        if os.path.isdir(path):
-            path = os.path.join(path, '*') 
-        for p in iglob(path):
-            if isdicom(p):
-                yield p
-
-    def path_gen_recursive():
-        if os.path.isdir(path):
-            for root,_,files in os.walk(path):
-                for f in files:
-                    p = os.path.join(root,f)
-                    if isdicom(p):
-                        yield p
-        elif isdicom(path):
-            yield path
-
-    dcmPaths = list(path_gen_recursive() if recursive else path_gen())
-    def dicom_gen():
-        for path in dcmPaths:
-            dcm = dicom.read_file(path)
-            yield DicomParser.to_attributedict(dcm)
-    return GenLen(dicom_gen(), len(dcmPaths))
+def _path_gen(path):
+    if os.path.isdir(path):
+        path = os.path.join(path, '*') 
+    return iglob(path)
 
 
-def ls(path=None):
+def _path_gen_recursive(path):
+    if os.path.isdir(path):
+        for root,_,files in os.walk(path):
+            for f in files:
+                yield os.path.join(root,f)
+    else:
+        yield path
+
+
+def ls(path=None, disp=True, recursive=False):
     '''Read dicom files from path and print a summary
     Args:
-    path    -- glob like path of dicom files, if None then the current dir is used
-    headers -- headers to use in summary in addition to the default ones
+    path      -- glob like path of dicom files, if None then the current dir is used
+    disp      -- (default: True) Print a summary
+    recursive -- (default: False) Recurse into subdirectories
 
     Returns:
     A list of dicom objects
     Prints a summary of the dicom objects
     '''
     path = path if path else os.path.abspath(os.path.curdir)
-    
-    dcms = []
-    dicomGen = read(paths)
-    pm = ProgressMeter(len(dicomGen), 'reading dicoms')
-    for dcm in dicomGen:
-        pm.increment()
-        pm.append(dcm)
-    pm.finish()
 
-    dicomSet = DicomSet(dcms)
-    dicomSet.disp()
+    dcms = []
+    path_gen = _path_gen_recurisve if recursive else _path_gen
+
+    log.info('reading dicoms from %s' % path)
+    for p in tqdm(path_gen(path)):
+        if isdicom(p):
+            dcm = DicomParser.to_attributedict(dicom.read_file(p))
+            dcm['filename'] = p
+            dcms.append(dcm)
+    log.info('read %d dicoms from %s' % (len(dcms), path))
+
+    key = lambda d: (d.StudyInstanceUID, d.SeriesNumber, d.InstanceNumber)
+    dicomSet = DicomSet(sorted(dcms, key=key))
+    if disp:
+        dicomSet.disp()
     return dicomSet
 
 
 def disp(dicoms, headers=tuple()):
     '''Display an iterable of dicoms, removing redundant information
-
     Args:
     dicoms  -- iterable of dicoms
     headers -- additional headers to display data for
@@ -238,7 +269,7 @@ def disp(dicoms, headers=tuple()):
 
     if len(dicoms) > 0:
         # Groupby Patient, StudyInstanceUID, SeriesInstanceUID
-        groups = ('PatientName', 'StudyID', 'SeriesNumber')
+        groups = ('PatientName', 'StudyInstanceUID', 'SeriesNumber')
         for patientName,studies in groupby(dicoms, groups):
             for studyID,series in studies:
                 t = PrettyTable(_headers + ('Count',))
@@ -254,7 +285,16 @@ def disp(dicoms, headers=tuple()):
         print('Dicom list is empty')
 
 
-def view(dicoms):
+def view(dicoms, groupby=tuple()):
+    '''Display a dicomset with arrview
+    Args:
+    dicoms  -- An iterable of dicoms
+    groupby -- Before displaying, group the dicoms (see data function)
+
+    Returns:
+    Displays the dicoms using arrview and returns the instance once
+    the window closes
+    '''
     import arrview
-    arr = data(dicoms)
+    arr = data(dicoms, field='pixel_array', groupby=groupby)
     return arrview.view(arr)

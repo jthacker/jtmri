@@ -30,7 +30,7 @@ class ProgressMeter(object):
         markerWidth = int(progress*self._width)
         progressStr =  '#' * markerWidth
         progressStr += ' ' * (self._width - markerWidth)
-        self._fd.write("\r[%s] %4.1f%% -- %s" % (progressStr, 100*progress, msg))
+        self._fd.write("\r[%s] %5.1f%% -- %s" % (progressStr, 100*progress, msg))
         self._fd.flush()
         
     def _end(self, msg):
@@ -55,121 +55,6 @@ class ProgressMeter(object):
         '''Call this if there is a recoverable error while procressing'''
         self._errorCount += 1
         self._display(msg)
-
-
-class DataObj(object):
-    def __init__(self, header, data):
-        '''data is assumed to be a numpy array'''
-        self.header = header
-        self.data = data
-        self._headerToColumnDict = dict(enumerate(header))
-
-    def columnNames(self):
-        return self.header
-
-    def column(self, name):
-        '''Select a column of data by its header name.
-        If the column does not exist than the empty list is returned'''
-        return self.data[:, self._headerToColumnDict[name]]
-
-    def __repr__(self):
-        return "DataObj(header=%s, data=%s)" % (self.header, self.data)
-
-
-def readData(filename, delimiter='\t'):
-    '''Reads a Tab-Separated-File (can switch to other delimiters with the keyword arg)
-    Assumes first line is the header and separates it from the rest of the data
-    Converts the remaining data into a numpy floating point array'''
-    rawData = list(csv.reader(open(filename), delimiter=delimiter))
-    header = rawData[0]
-    data = np.array(rawData[1:], dtype=np.float)
-    return DataObj(header=header, data=data)
-
-
-def _decompressValues(vals):
-    i = 0
-    N = len(vals)
-    while i < N:
-        if N - i >= 3:
-            v,vn,vnn = vals[i:i+3]
-            if vn == v:
-                yield v
-                yield vn 
-                for _ in xrange(vnn):
-                    yield v
-                i += 3
-            else:
-                yield vals[i]
-                i += 1
-        else:
-            yield vals[i]
-            i += 1
-
-
-def readDSV(filename):
-    '''Read a Siemens DSP-simulator DSV file. 
-    Decompresses the data in the [VALUES] section then return it as a dictionary'''
-    sectionRegex = re.compile(r'\[(.*)\]')
-    keyValPairRegex = re.compile(r'(.*)=(.*)')
-
-    dsv = {}
-
-    with open(filename) as f:
-        # 1: Read and parse the configuration until the VALUES section is reached
-        section = None
-        for line in f:
-            if line[0] == ';': # Ignore lines starting with a comma
-                continue
-
-            sectionMatch = sectionRegex.match(line)
-
-            # If the line represents a new section, then update the section
-            if sectionMatch:
-                section = sectionMatch.groups()[0].lower()
-                log.debug("Parsing [%s] Section" % section.upper())
-                dsv[section] = {}
-                if section == 'values':
-                    break
-                else:
-                    continue
-
-            keyValMatch = keyValPairRegex.match(line)
-            if keyValMatch:
-                key,val = keyValMatch.groups()
-                try:
-                    val = float(val)
-                except ValueError:
-                    val = val.strip()
-                dsv[section][key.lower()] = val
-
-        assert 'definitions' in dsv.keys(), 'No [DEFINITIONS] section was found'
-        definitions = dsv['definitions']
-        
-        assert section == 'values', "No [VALUES] section was found. Last section seen %s. Configuration so far %s" % (section, dsv)
-
-        # 2: Read all the data from the values section
-        rawValues = []
-        for line in f:
-            if line[0] == ';': # Ignore lines starting with a comma
-                continue
-            rawValues.append(line)
-        # Remove the last line since it is a blank line
-        rawValues = np.array(rawValues[:-1], dtype=int)
-        rawValuesLen = rawValues.size
-        
-        # 3: Decompress and scale the values.
-        # Decompress. 0 0 3 -> 0 0 0 0 0
-        # Convert from deltas to real values
-        # Scalesby the vertfactor
-        values = np.array(list(_decompressValues(rawValues))).cumsum() / definitions['vertfactor']
-        
-        log.debug("Found %d raw values and %d decompressed values." % (rawValuesLen, values.size))
-
-        expectedSamples = definitions['samples']
-        assert values.size == expectedSamples, "The number of decompressed values, %d, should be the same as the number of data points defined in the header, %d." % (values.size, expectedSamples)
-        
-        dsv['values'] = values
-        return dsv 
 
 
 def unique(seq):
@@ -202,8 +87,8 @@ def extract(m, thresh=0):
 
 class AttributeDict(object):
     '''A dictionary that can have its keys accessed as if they are attributes'''
-    def __init__(self, *args, **kwargs):
-        self.__dict__['_dict'] = dict(*args, **kwargs)
+    def __init__(self, dic):
+        self.__dict__['_dict'] = dic
     
     def __dir__(self):
         return sorted(set(dir(type(self)) + self._dict.keys()))
@@ -218,11 +103,20 @@ class AttributeDict(object):
         return self._dict[key]
 
     def __setattr__(self, key, val):
-        self._dict[key] = val
+        if not key.startswith('_'):
+            self._dict[key] = val
+        else:
+            return super(AttributeDict, self).__setattr__(key, val)
 
     def __iter__(self):
         return self._dict.__iter__()
-    
+
+    def __delitem__(self, key):
+        del self._dict[key]
+   
+    def iteritems(self):
+        return self._dict.iteritems()
+
     def get(self, key, default=None):
         return self._dict.get(key, default)
 
@@ -266,3 +160,21 @@ class GenLen(object):
 
     def __len__(self):
         return self._length
+
+
+class ListAttrAccessor(object):
+    '''Access the same attribute in a list of objects'''
+    def __init__(self, subset):
+        obj = subset[0]
+        self._attrs = []
+        self._attrs = obj.keys()
+        self._subset = subset
+
+    def __dir__(self):
+        return self.__dict__.keys() + self._attrs
+
+    def __getattr__(self, name):
+        if name not in self._attrs:
+            raise NameError("name %r is not defined" % name)
+        values = [d[name] if name in d else None for d in self._subset]
+        return np.array(values)
