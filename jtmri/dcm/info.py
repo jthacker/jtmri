@@ -45,7 +45,9 @@ def path_gen(path, recursive):
                 if os.path.basename(f) == 'info.yaml':
                     yield os.path.join(root,f)
     else:
-        yield os.path.join(os.path.dirname(path), 'info.yaml')
+        info = os.path.join(os.path.dirname(path), 'info.yaml')
+        if os.path.exists(info):
+            yield info
 
 
 def load_infos(dcms, path, recursive):
