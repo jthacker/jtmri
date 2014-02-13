@@ -1,6 +1,8 @@
 import numpy as np 
 import pylab as plt 
+from fuzzywuzzy import fuzz
 import os, sys, logging, csv, re, itertools, collections
+
 
 log = logging.getLogger('jtmri.utils')
 
@@ -149,8 +151,16 @@ def asiterable(val):
         return val
 
 
-def rep(obj, props):
-    s = obj.__class__.__name__
+def rep(self, props):
+    '''Create a repr of a property based class quickly
+    Args:
+    self  -- pass the self reference for the class here
+    props -- list of properties to add to the representation
+
+    Returns:
+    A string representing the class
+    '''
+    s = self.__class__.__name__
     s += '(%s)' % ','.join(['%s=%r' % (prop,getattr(obj,prop)) for prop in props])
     return s
 
@@ -187,3 +197,17 @@ class ListAttrAccessor(object):
             return ListAttrAccessor(values)
         else:
             return np.array(values)
+
+
+def similar(s1, s2, threshold=90):
+    '''Fuzzy comparison function
+    Args:
+    s1,s2     -- strings to compare
+    threshold -- (default: 90) threshold for signifiance, 
+                 should be between 0 and 100
+    Returns:
+    A predicate function that returns True if the 
+    argument is similar to the matcher otherwise False.
+    '''
+    return fuzz.partial_ratio(s1, s2) >= threshold
+
