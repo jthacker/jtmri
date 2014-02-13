@@ -9,7 +9,8 @@ from prettytable import PrettyTable
 from tqdm import tqdm
 
 from .siemens import SiemensProtocol
-from .utils import unique, AttributeDict, ListAttrAccess
+from .info import load_infos
+from ..utils import unique, AttributeDict, ListAttrAccessor
 
 
 log = logging.getLogger('jtmri:dicom')
@@ -72,8 +73,18 @@ class DicomSet(object):
         '''Access an attribute from all objects in this set'''
         return ListAttrAccessor(self) 
 
+    def filter(self, func):
+        '''Filter the dicoms in this dataset
+        Args:
+        func -- predicate function for filtering
+
+        Returns:
+        A DicomSet with dicoms matching the predicate
+        '''
+        return DicomSet(ifilter(func, self))
+
     def by_series(self, *nums):
-        return DicomSet(ifilter(lambda d: d.SeriesNumber in nums, self))
+        return self.filter(lambda d: d.SeriesNumber in nums)
 
     def series(self):
         for num in unique(self.all.SeriesNumber):
@@ -237,16 +248,20 @@ def ls(path=None, disp=True, recursive=False):
     '''
     path = path if path else os.path.abspath(os.path.curdir)
 
-    dcms = []
     path_gen = _path_gen_recurisve if recursive else _path_gen
 
     log.info('reading dicoms from %s' % path)
+    dcms = []
+    infos = []
     for p in tqdm(path_gen(path)):
         if isdicom(p):
             dcm = DicomParser.to_attributedict(dicom.read_file(p))
             dcm['filename'] = p
             dcms.append(dcm)
     log.info('read %d dicoms from %s' % (len(dcms), path))
+    log.info('read %d info objects' % len(infos))
+
+    dcms = load_infos(dcms, path, recursive)
 
     key = lambda d: (d.StudyInstanceUID, d.SeriesNumber, d.InstanceNumber)
     dicomSet = DicomSet(sorted(dcms, key=key))
@@ -268,7 +283,6 @@ def disp(dicoms, headers=tuple()):
     _headers = ('SeriesNumber', 'SeriesDescription','RepetitionTime') + headers
 
     if len(dicoms) > 0:
-        # Groupby Patient, StudyInstanceUID, SeriesInstanceUID
         groups = ('PatientName', 'StudyInstanceUID', 'SeriesNumber')
         for patientName,studies in groupby(dicoms, groups):
             for studyID,series in studies:

@@ -85,6 +85,11 @@ def extract(m, thresh=0):
     return m[indx]
 
 
+def flatten(iterable):
+    '''Flattens the iterable by one level'''
+    return (x for sublst in iterable for x in sublst)
+
+
 class AttributeDict(object):
     '''A dictionary that can have its keys accessed as if they are attributes'''
     def __init__(self, dic):
@@ -164,17 +169,21 @@ class GenLen(object):
 
 class ListAttrAccessor(object):
     '''Access the same attribute in a list of objects'''
-    def __init__(self, subset):
-        obj = subset[0]
+
+    def __init__(self, lst):
+        obj = lst[0] if len(lst) > 0 else {}
         self._attrs = []
         self._attrs = obj.keys()
-        self._subset = subset
+        self._lst = lst 
 
     def __dir__(self):
         return self.__dict__.keys() + self._attrs
 
-    def __getattr__(self, name):
-        if name not in self._attrs:
-            raise NameError("name %r is not defined" % name)
-        values = [d[name] if name in d else None for d in self._subset]
-        return np.array(values)
+    def __getattr__(self, attr):
+        if attr not in self._attrs:
+            raise AttributeError("First object in specified has no attribute %r" % attr)
+        values = [d[attr] if attr in d else None for d in self._lst]
+        if len(values) > 0 and isinstance(values[0], AttributeDict):
+            return ListAttrAccessor(values)
+        else:
+            return np.array(values)
