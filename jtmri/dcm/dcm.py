@@ -235,7 +235,7 @@ def _path_gen_recursive(path):
         yield path
 
 
-def ls(path=None, disp=True, recursive=False):
+def read(path=None, disp=True, recursive=False):
     '''Read dicom files from path and print a summary
     Args:
     path      -- glob like path of dicom files, if None then the current dir is used

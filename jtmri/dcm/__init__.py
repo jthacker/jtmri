@@ -1,1 +1,1 @@
-from .dcm import ls
+from .dcm import read
