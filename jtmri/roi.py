@@ -123,7 +123,15 @@ def create_mask(shape, slc, poly, collapse=False):
     return mask
 
 
-ROI = namedtuple('ROI', 'name,poly,slc')
+class ROI(object):
+    def __init__(self, name, poly, slc):
+        self.name = name
+        self.poly = poly
+        self.slc = slc
+
+    def to_mask(self, shape, collapse=False):
+        return create_mask(shape, self.slc, self.poly, collapse)
+
 
 class ROISet(object):
     def __init__(self, rois):
@@ -133,14 +141,12 @@ class ROISet(object):
         return ROISet(filter(lambda r: r.name in names, self.rois))
 
     def to_mask(self, shape, collapse=False):
-        mask = np.zeros(shape, dtype=bool)
-        for roi in self.rois:
-            mask = np.logical_or(mask, create_mask(shape, roi.slc, roi.poly, collapse))
-        return mask
+        masks = map(lambda a: a.to_mask(shape, collapse), self)
+        return reduce(np.logical_or, masks) 
 
     @property
     def names(self):
-        return [r.name for r in self.rois]
+        return set(r.name for r in self.rois)
 
     @property
     def count(self):
@@ -150,7 +156,7 @@ class ROISet(object):
         return self.count
 
     def __iter__(self):
-        return (ROISet([roi]) for roi in self.rois)
+        return iter(self.rois)
 
 
 def load(filename):
@@ -166,3 +172,19 @@ def load(filename):
     return ROISet(rois)
 
 
+def _filter_viewdims(slc):
+    viewdims = slc.viewdims
+    return [0 if d in viewdims else v for d,v in enumerate(slc)] 
+
+
+def save(rois, filename):
+    with h5py.File(filename, 'w') as f:
+        root = f.create_group('rois')
+        for i,roi in enumerate(rois):
+            roigrp = root.create_group('%d' % i)
+            # h5py only support utf8 strings at the moment, need to coerce data to
+            # this representation
+            roigrp.attrs['name'] = roi.name
+            roigrp.attrs['viewdims'] = roi.slc.viewdims
+            roigrp.attrs['arrslc'] = _filter_viewdims(roi.slc)
+            roigrp['poly'] = roi.poly

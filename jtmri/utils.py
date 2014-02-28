@@ -96,6 +96,10 @@ class AttributeDict(object):
     '''A dictionary that can have its keys accessed as if they are attributes'''
     def __init__(self, dic):
         self.__dict__['_dict'] = dic
+        self.values = dic.values
+        self.keys = dic.keys
+        self.get = dic.get
+        self.iteritems = dic.iteritems
     
     def __dir__(self):
         return sorted(set(dir(type(self)) + self._dict.keys()))
@@ -115,24 +119,16 @@ class AttributeDict(object):
         else:
             return super(AttributeDict, self).__setattr__(key, val)
 
+    def update(self, *args, **kwargs):
+        self._dict.update(*args, **kwargs)
+        return self
+
     def __iter__(self):
         return self._dict.__iter__()
 
     def __delitem__(self, key):
         del self._dict[key]
    
-    def iteritems(self):
-        return self._dict.iteritems()
-
-    def get(self, key, default=None):
-        return self._dict.get(key, default)
-
-    def keys(self):
-        return self._dict.keys()
-
-    def values(self):
-        return self._dict.values()
-
     def __str__(self):
         return 'AttributeDict(' + str(self._dict) + ')'
 
@@ -190,13 +186,13 @@ class ListAttrAccessor(object):
         return self.__dict__.keys() + self._attrs
 
     def __getattr__(self, attr):
+        if len(self._lst) == 0:
+            return []
+
         if attr not in self._attrs:
-            raise AttributeError("First object in specified has no attribute %r" % attr)
-        values = [d[attr] if attr in d else None for d in self._lst]
-        if len(values) > 0 and isinstance(values[0], AttributeDict):
-            return ListAttrAccessor(values)
-        else:
-            return np.array(values)
+            raise AttributeError("%r has no attribute %r" % attr)
+
+        return np.array([d[attr] if attr in d else None for d in self._lst])
 
 
 def similar(s1, s2, threshold=90):

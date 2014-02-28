@@ -65,8 +65,12 @@ class DicomParser(object):
 
 
 class DicomSet(object):
-    def __init__(self, dcms):
+    def __init__(self, dcms=tuple()):
         self._dcms = list(dcms)
+
+    @property
+    def first(self):
+        return self[0]
 
     @property
     def all(self):
@@ -82,6 +86,9 @@ class DicomSet(object):
         A DicomSet with dicoms matching the predicate
         '''
         return DicomSet(ifilter(func, self))
+
+    def groupby(self, key):
+        return groupby(self, key=key, outtype=DicomSet)
 
     def by_series(self, *nums):
         return self.filter(lambda d: d.SeriesNumber in nums)
@@ -102,6 +109,9 @@ class DicomSet(object):
     @property
     def count(self):
         return len(self)
+
+    def append(self, dcm):
+        self._dcms.append(dcm)
 
     def __iter__(self):
         return iter(self._dcms)
@@ -124,7 +134,7 @@ def isdicom(path):
     return isdcm
 
 
-def groupby(dicoms, key=lambda x: x, sort=True):
+def groupby(dicoms, key=lambda x: x, sort=True, outtype=list):
     '''Group dicoms together by key, no presorting necessary
     Args:
     dicoms  -- an iterable of dicoms
@@ -157,7 +167,7 @@ def groupby(dicoms, key=lambda x: x, sort=True):
             key,extrakeys = key[0],key[1:]
         keyfunc = lambda x, key=key: x.get(key)
 
-    d = defaultdict(list)
+    d = defaultdict(outtype)
     for dcm in dicoms:
         d[keyfunc(dcm)].append(dcm)
     
@@ -220,25 +230,24 @@ def data(iterable, field, groupby=tuple(), reshape=True):
         return np.array([])
 
 
-def _path_gen(path):
+def _path_gen(path, recursive):
     if os.path.isdir(path):
         path = os.path.join(path, '*') 
-    return iglob(path)
 
-
-def _path_gen_recursive(path):
-    if os.path.isdir(path):
-        for root,_,files in os.walk(path):
-            for f in files:
-                yield os.path.join(root,f)
-    else:
-        yield path
+    for path in iglob(path):
+        if recursive and os.path.isdir(path):
+            for root,_,files in os.walk(path):
+                for f in files:
+                    yield os.path.join(root,f)
+        else:
+            yield path
 
 
 def read(path=None, disp=True, recursive=False):
     '''Read dicom files from path and print a summary
     Args:
     path      -- glob like path of dicom files, if None then the current dir is used
+    info_path -- path to read info.yaml file from
     disp      -- (default: True) Print a summary
     recursive -- (default: False) Recurse into subdirectories
 
@@ -248,20 +257,14 @@ def read(path=None, disp=True, recursive=False):
     '''
     path = path if path else os.path.abspath(os.path.curdir)
 
-    path_gen = _path_gen_recurisve if recursive else _path_gen
-
-    log.info('reading dicoms from %s' % path)
     dcms = []
-    infos = []
-    for p in tqdm(path_gen(path)):
+    for p in tqdm(_path_gen(path, recursive)):
         if isdicom(p):
             dcm = DicomParser.to_attributedict(dicom.read_file(p))
             dcm['filename'] = p
             dcms.append(dcm)
-    log.info('read %d dicoms from %s' % (len(dcms), path))
-    log.info('read %d info objects' % len(infos))
 
-    dcms = load_infos(dcms, path, recursive)
+    dcms = load_infos(dcms)
 
     key = lambda d: (d.StudyInstanceUID, d.SeriesNumber, d.InstanceNumber)
     dicomSet = DicomSet(sorted(dcms, key=key))
