@@ -111,7 +111,10 @@ class AttributeDict(object):
         self._dict[key] = val
 
     def __getattr__(self, key):
-        return self._dict[key]
+        if key in self._dict:
+            return self._dict[key]
+        else:
+            super(AttributeDict, self).__getattr__(key)
 
     def __setattr__(self, key, val):
         if not key.startswith('_'):
