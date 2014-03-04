@@ -243,13 +243,14 @@ def _path_gen(path, recursive):
             yield path
 
 
-def read(path=None, disp=True, recursive=False):
+def read(path=None, disp=True, recursive=False, progress=lambda x:x):
     '''Read dicom files from path and print a summary
     Args:
     path      -- glob like path of dicom files, if None then the current dir is used
     info_path -- path to read info.yaml file from
     disp      -- (default: True) Print a summary
     recursive -- (default: False) Recurse into subdirectories
+    progress  -- (default: None) Callback function, takes one argument (# dicoms read)
 
     Returns:
     A list of dicom objects
@@ -258,8 +259,11 @@ def read(path=None, disp=True, recursive=False):
     path = path if path else os.path.abspath(os.path.curdir)
 
     dcms = []
-    for p in tqdm(_path_gen(path, recursive)):
+    paths = _path_gen(path, recursive)
+    paths = tqdm(paths) if disp else paths
+    for p in paths:
         if isdicom(p):
+            progress(len(dcms))
             dcm = DicomParser.to_attributedict(dicom.read_file(p))
             dcm['filename'] = p
             dcms.append(dcm)
