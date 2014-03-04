@@ -81,7 +81,16 @@ class Fitter(object):
         self._guess = guess
         self._failedFitFunc = failedFitFunc
 
-    def __call__(self, xdata, ydata):
+    def __call__(self, x, arr, axis=None, disp=None):
+        kwargs = {}
+        if axis is not None:
+            kwargs['axis'] = axis
+        if disp is not None:
+            kwargs['disp'] = disp
+
+        return apply_along_axis(self, x, arr, **kwargs)
+
+    def fit(self, xdata, ydata):
         '''Find estimates for the parameters of the fitFunc given the 
         initalGuess, xdata and ydata. Thie initalGuess is needed inorder 
         for the nonlinear fitting function to converge. It should be the 
@@ -123,27 +132,31 @@ class Fitter(object):
         return fit
 
 
-def fitMapper(fitter, arr, axis=None):
-    '''Apply fitter function on arr
+def apply_along_axis(fitter, x, arr, axis=-1, disp=True):
+    '''Apply fitter function to arr
     Args:
     fitter -- a function that takes a numpy array of y values and 
               returns the fit value of paramters.
     arr    -- multi-dimenision array to fit over
-    axis   -- the axis to fit the data across
+    axis   -- (default: -1) the axis to fit the data across
     '''
-    if axis is None:
-        axis = arr.ndim - 1
+    axis = np.arange(arr.ndim)[axis]
+    assert len(x) == arr.shape[axis]
     total = reduce(op.mul, (d for i,d in enumerate(arr.shape) if i != axis), 1)
-    pm = ProgressMeter(total, 'Calculating map')
-    def fit(ydata):
-        pm.increment()
-        return fitter(ydata)
+    if disp:
+        pm = ProgressMeter(total, 'Calculating map')
+    def fit(y):
+        if disp:
+            pm.increment()
+        return fitter.fit(x, y).params
     res = np.apply_along_axis(fit, axis, arr)
-    pm.finish()
+    if disp:
+        pm.finish()
     return res
 
 
 ### Common Fitters ###
-r2Fitter = Fitter(lambda te, so, r2: so * np.exp(-1 * r2 * te), (1,1))
-r2StarFitter = Fitter(lambda te, so, r2star: so * np.exp(-1 * r2star * te), (1,1))
-r2PrimeFitter = Fitter(lambda tau, so, r2prime: so * np.exp(-2 * r2prime * tau), (1,1))
+class fitters(object):
+    r2 = Fitter(lambda te, so, r2: so * np.exp(-1 * r2 * te), (1,1))
+    r2star = Fitter(lambda te, so, r2star: so * np.exp(-1 * r2star * te), (1,1))
+    r2prime = Fitter(lambda tau, so, r2prime: so * np.exp(-2 * r2prime * tau), (1,1))
