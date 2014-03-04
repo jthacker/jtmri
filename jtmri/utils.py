@@ -177,24 +177,18 @@ class GenLen(object):
 
 
 class ListAttrAccessor(object):
-    '''Access the same attribute in a list of objects'''
+    '''Access the same attribute from each object in a list'''
 
     def __init__(self, lst):
-        obj = lst[0] if len(lst) > 0 else {}
+        self._obj = lst[0] if len(lst) > 0 else {}
         self._attrs = []
-        self._attrs = obj.keys()
+        self._attrs = self._obj.keys()
         self._lst = lst 
 
     def __dir__(self):
         return self.__dict__.keys() + self._attrs
 
     def __getattr__(self, attr):
-        if len(self._lst) == 0:
-            return []
-
-        if attr not in self._attrs:
-            raise AttributeError("%r has no attribute %r" % attr)
-
         return np.array([d[attr] if attr in d else None for d in self._lst])
 
 
