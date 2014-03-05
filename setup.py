@@ -9,5 +9,5 @@ setup(
             'numpy','traits','traitsui',
             'scikit-image','tqdm',
             'prettytable', 'PySide', 'PyYAML',
-            'pydicom']
+            'pydicom', 'fuzzywuzzy']
 )
