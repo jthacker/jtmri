@@ -8,7 +8,7 @@ def _read_shape(line):
     return shape.lower(),_colormap[int(colorNum)]
 
 def _read_numeric_cmd(line):
-    return [s.strip(), line.strip().split())]
+    return [s.strip(), line.strip().split()]
 
 def _is_shape(line):
     chks = [line.lower().startswith(shape) for shape in _shapes]
