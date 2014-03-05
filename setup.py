@@ -8,5 +8,6 @@ setup(
         install_requires=[
             'numpy','traits','traitsui',
             'scikit-image','tqdm',
-            'prettytable', 'PySide', 'PyYAML']
+            'prettytable', 'PySide', 'PyYAML',
+            'pydicom']
 )
