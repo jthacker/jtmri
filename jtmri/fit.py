@@ -20,17 +20,15 @@ def _minValueFailedFitFunc(initialGuess):
 Fit = namedtuple('Fit', 'x y params paramdict func covmat success')
 
 
-def plot_fit(fit, ax=None, funcOvershoot=0.2):
+def plot_fit(fit, ax=None, overshoot=0.2):
     '''Plot the fitted parameters. The data points are placed and then the
     function is plotted over the x-range used during the inital fit.
     Args:
-    funcOvershoot -- amount to extend the x range when plotting 
-                     the fitted function
+    overshoot -- percentage to extend the x range when plotting the fitted function
     '''
     fig = None
     if ax is None:
-        fig = plt.figure()
-        ax = fig.set_subplot(111)
+        fig,ax = plt.subplots()
     title = " ".join(["%s=%0.3g" % (k,v) for k,v in fit.paramdict.iteritems()])
     title = title if fit.success else "FAILED " + title
 
@@ -39,7 +37,7 @@ def plot_fit(fit, ax=None, funcOvershoot=0.2):
 
     xmin = fit.x.min()
     xmax = fit.x.max()
-    overshoot = funcOvershoot * (xmax - xmin)
+    overshoot = overshoot * (xmax - xmin)
     xFunc = np.linspace(xmin - overshoot, xmax + overshoot, 100)
 
     ax.plot(xFunc, fit.func(xFunc, *fit.params), 'r-', label='fit')
