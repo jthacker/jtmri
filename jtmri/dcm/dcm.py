@@ -93,9 +93,16 @@ class DicomSet(object):
     def by_series(self, *nums):
         return self.filter(lambda d: d.SeriesNumber in nums)
 
+    def by_studyid(self, *studyids):
+        return self.filter(lambda d: d.StudyID in studyids)
+
     def series(self):
         for num in unique(self.all.SeriesNumber):
             yield self.by_series(num)
+
+    def studies(self):
+        for sid in unique(self.all.StudyInstanceUID):
+            yield self.filter(lambda d: d.StudyInstanceUID == sid)
 
     def disp(self):
         disp(self)
@@ -277,31 +284,31 @@ def read(path=None, disp=True, recursive=False, progress=lambda x:x):
     return dicomSet
 
 
-def disp(dicoms, headers=tuple()):
+def disp(dicomset, extra_headers=tuple()):
     '''Display an iterable of dicoms, removing redundant information
     Args:
-    dicoms  -- iterable of dicoms
-    headers -- additional headers to display data for
+    dicomset      -- dicomset
+    extra_headers -- additional headers to display, should be keys in the dicoms
 
     Returns:
     Returns nothing.
     Prints a summary of the dicom data
     '''
-    _headers = ('SeriesNumber', 'SeriesDescription','RepetitionTime') + headers
-
-    if len(dicoms) > 0:
-        groups = ('PatientName', 'StudyInstanceUID', 'SeriesNumber')
-        for patientName,studies in groupby(dicoms, groups):
-            for studyID,series in studies:
-                t = PrettyTable(_headers + ('Count',))
-                t.align = 'l'
-
-                print('Patient: %s' % patientName)
-                print('Study: %s' % studyID)
-                for seriesNum,dcms in series:
-                    row = [dcms[0].get(h) for h in _headers] + [len(dcms)]
-                    t.add_row(row)
-                print('%s\n' % t)
+    _headers = ('SeriesNumber', 'SeriesDescription','RepetitionTime') + extra_headers
+    
+    if dicomset.count > 0:
+        for study in dicomset.studies():
+            st = study.first
+            print('Patient: %r' % st.PatientName)
+            print('StudyID: %r' % st.StudyID)
+            print('StudyInstanceUID: %r' % st.StudyInstanceUID)
+            
+            t = PrettyTable(_headers + ('Count',))
+            t.align = 'l'
+            for series in study.series():
+                se = series.first
+                t.add_row([se.get(h) for h in _headers] + [series.count])
+            print('%s\n' % t)
     else:
         print('Dicom list is empty')
 
