@@ -118,9 +118,6 @@ class DicomSet(object):
     def count(self):
         return len(self)
 
-    def append(self, dcm):
-        self._dcms.append(dcm)
-
     def __iter__(self):
         return iter(self._dcms)
 
