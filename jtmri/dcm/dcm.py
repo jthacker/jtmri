@@ -9,8 +9,8 @@ from prettytable import PrettyTable
 from tqdm import tqdm
 
 from .siemens import SiemensProtocol
-from .info import load_infos
 from ..utils import unique, AttributeDict, ListAttrAccessor
+from . import dcminfo
 
 
 log = logging.getLogger('jtmri:dicom')
@@ -67,6 +67,7 @@ class DicomParser(object):
 class DicomSet(object):
     def __init__(self, dcms=tuple()):
         self._dcms = list(dcms)
+        self._dcms.sort(key=lambda d: (d.StudyInstanceUID, d.SeriesNumber, d.InstanceNumber))
 
     @property
     def first(self):
@@ -107,12 +108,12 @@ class DicomSet(object):
     def disp(self):
         disp(self)
 
-    def data(self, groupby=tuple()):
-        return data(self, field='pixel_array', groupby=groupby)
-
     def view(self, groupby=tuple()):
         return view(self, groupby=groupby)
 
+    def data(self, groupby=tuple()):
+        return data(self, field='pixel_array', groupby=groupby)
+    
     @property
     def count(self):
         return len(self)
@@ -131,7 +132,7 @@ class DicomSet(object):
 
 
 def isdicom(path):
-    '''Check if path is a dicom file'''
+    '''Check if path is a dicom file based on the file magic'''
     isdcm = False
     if os.path.isfile(path):
         with open(path,'r') as fp:
@@ -265,23 +266,22 @@ def read(path=None, disp=True, recursive=False, progress=lambda x:x):
     '''
     path = path if path else os.path.abspath(os.path.curdir)
 
-    dcms = []
+    dcmlist = []
     paths = _path_gen(path, recursive)
     paths = tqdm(paths) if disp else paths
     for p in paths:
         if isdicom(p):
-            progress(len(dcms))
+            progress(len(dcmlist))
             dcm = DicomParser.to_attributedict(dicom.read_file(p))
             dcm['filename'] = p
-            dcms.append(dcm)
+            dcmlist.append(dcm)
 
-    dcms = load_infos(dcms)
+    infos = dcminfo.read(path, recursive) 
+    dicomset = DicomSet(dcminfo.update_metadata(infos, DicomSet(dcmlist)))
 
-    key = lambda d: (d.StudyInstanceUID, d.SeriesNumber, d.InstanceNumber)
-    dicomSet = DicomSet(sorted(dcms, key=key))
     if disp:
-        dicomSet.disp()
-    return dicomSet
+        dicomset.disp()
+    return dicomset
 
 
 def disp(dicomset, extra_headers=tuple()):
