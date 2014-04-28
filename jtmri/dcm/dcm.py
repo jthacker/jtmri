@@ -270,7 +270,7 @@ def read(path=None, disp=True, recursive=False, progress=lambda x:x):
         if isdicom(p):
             progress(len(dcmlist))
             dcm = DicomParser.to_attributedict(dicom.read_file(p))
-            dcm['filename'] = p
+            dcm.filename = p
             dcmlist.append(dcm)
 
     infos = dcminfo.read(path, recursive) 
