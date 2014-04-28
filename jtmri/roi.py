@@ -104,10 +104,10 @@ class SliceTuple(tuple):
 def create_mask(shape, slc, poly, collapse=False):
     '''Convert the polygons to a binary mask according the specified array shape
     Args:
-    shape -- a tuple with the size of each dimension in the mask
-    slc   -- SliceTuple describing where to apply the polygon to
-    poly  -- A numpy array of (x,y) point pairs describing a polygon
-    
+    shape    -- a tuple with the size of each dimension in the mask
+    slc      -- SliceTuple describing where to apply the polygon to
+    poly     -- A numpy array of (x,y) point pairs describing a polygon
+    collapse -- Ignore any dimensions > the number of dimensions in shape (i.e. len(shape))
     Returns:
     binary mask with the region in poly set to False and everywhere else
     set to True
