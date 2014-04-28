@@ -128,13 +128,13 @@ class AttributeDict(object):
         if key in self._dict:
             return self._dict[key]
         else:
-            super(AttributeDict, self).__getattr__(key)
+            raise AttributeError("'AttributeDict' object has no attribute %r" % key)
 
     def __setattr__(self, key, val):
         if not key.startswith('_'):
             self._dict[key] = val
         else:
-            return super(AttributeDict, self).__setattr__(key, val)
+            raise AttributeError("'AttributeDict' object has no attribute %r" % key)
 
     def update(self, *args, **kwargs):
         self._dict.update(*args, **kwargs)
@@ -218,3 +218,18 @@ def similar(s1, s2, threshold=90):
     '''
     return fuzz.partial_ratio(s1, s2) >= threshold
 
+
+def filter_error(func, catch=(RuntimeError,)):
+    '''If an exception is thrown, then return False,
+    otherwise return the result of the func.
+    Args:
+    func  -- Function to wrap
+    catch -- List of exceptions to catch'''
+
+    def _filter_error(*args, **kwargs):
+        try:
+            res = func(*args, **kwargs)
+        except catch:
+            return False
+        return res
+    return _filter_error
