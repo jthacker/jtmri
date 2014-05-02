@@ -25,7 +25,12 @@ class DicomParser(object):
     def to_dict(dcm, wrap=dict):
         d = DicomParser._dicom_to_dict(dcm, wrap)
         d['Siemens'] = wrap(SiemensProtocol.from_dicom(dcm))
-        d['pixel_array'] = dcm.pixel_array
+        pixel_array = None
+        try:
+            pixel_array = dcm.pixel_array
+        except TypeError:
+            pass
+        d['pixel_array'] = pixel_array
         return d
     
     @staticmethod
@@ -274,7 +279,8 @@ def read(path=None, disp=True, recursive=False, progress=lambda x:x):
             dcmlist.append(dcm)
 
     infos = dcminfo.read(path, recursive) 
-    dicomset = DicomSet(dcminfo.update_metadata(infos, DicomSet(dcmlist)))
+    dicomset = DicomSet(dcmlist)
+    dcminfo.update_metadata(infos, dicomset)
 
     if disp:
         dicomset.disp()

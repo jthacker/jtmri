@@ -32,7 +32,6 @@ class Study(object):
                 if series.matches(dcm):
                     series.add_metadata(meta, dcm, study_dcms)
             dcm['meta'] = meta
-            yield dcm
 
 
 class Series(object):
@@ -117,9 +116,8 @@ def read(path, recursive):
     return infos
 
 
-def update_metadata(infos, dcms):
+def update_metadata(study_infos, dcms):
     for study_dcms in dcms.studies():
-        for info in infos:
+        for info in study_infos:
             if info.matches(study_dcms.first):
-                for dcm in info.update_metadata(study_dcms):
-                    yield dcm
+                info.update_metadata(study_dcms)
