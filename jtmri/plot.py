@@ -24,3 +24,13 @@ def multi_bar(xlabels, data, yerr, grouplabels, groupcolors, ax=None, padding=0.
     ax.legend([r[0] for r in rects], grouplabels)
     return ax,rects
 
+
+def line(y_intercept, slope, xlimits=None, ax=None):
+    if ax is None:
+        _,ax = plt.subplots()
+    if xlimits is None:
+        xlimits = ax.get_xlim()
+    x = np.linspace(xlimits[0], xlimits[1])
+    y = slope * x + y_intercept
+    line = ax.plot(x, y)
+    return ax,line
