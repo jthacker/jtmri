@@ -26,6 +26,7 @@ def multi_bar(xlabels, data, yerr, grouplabels, groupcolors, ax=None, padding=0.
 
 
 def line(y_intercept, slope, xlimits=None, ax=None):
+    '''Draw a line by the y-intercept and slope within the limits of the axes'''
     if ax is None:
         _,ax = plt.subplots()
     if xlimits is None:
@@ -34,3 +35,21 @@ def line(y_intercept, slope, xlimits=None, ax=None):
     y = slope * x + y_intercept
     line = ax.plot(x, y)
     return ax,line
+
+
+def adjust_limits(ax, xadj=0.1, yadj=0.1):
+    '''Adjust the limits on the specified axes
+    Args:
+    ax   -- axis to adjust limits on
+    xadj -- fraction of x-range to increase(+)/decrease(-) limits by
+    yadj -- fraction of y-range to increase(+)/decrease(-) limits by
+   
+    Use positive(+) adjustment values to increase the limits and
+    negative(-) values to decrease the limits'''
+    xmin,xmax = ax.get_xlim()
+    ymin,ymax = ax.get_ylim()
+    xrng = xmax - xmin
+    yrng = ymax - ymin
+    ax.set_xlim(xmin - xadj * xrng, xmax + xadj * xrng)
+    ax.set_ylim(ymin - yadj * yrng, ymax + yadj * yrng)
+
