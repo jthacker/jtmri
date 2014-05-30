@@ -45,6 +45,7 @@ def plot_by_contours(arr, contour_masks, contour_vals, ax=None):
     ax.set_ylabel('Mean R2* value')
     return ax.plot(x, y, 'o--')[0], x, y
 
+
 def plot_by_distance(arr, distances, ax=None):
     assert arr.shape == distances.shape
     if ax is None:
