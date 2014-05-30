@@ -80,17 +80,21 @@ def chunks(l, n):
         yield l[i:i+n]
 
 
-def extract(arr, threshold=0, padding=0):
+def extract(arr, threshold=0, padding=0, return_idx=False):
     '''Find the smallest rectangular region in the array that can hold
     all values > thresh
     Args:
-    arr       -- Array to extract values from
-    threshold -- Values <= threshold are considered background
-    padding   -- When extracting, adding padding around the final region
-
+    arr        -- Array to extract values from
+    threshold  -- Values <= threshold are considered background
+    padding    -- When extracting, adding padding around the final region
+    return_idx -- (default False) When True, returns a tuple of
+                  the indicies used to slice the array and the sliced array.
+                  Otherwise, only the sliced array is returned.
     Returns:
     The smallest rectangular region, extracted from arr with padding 
     added to the border.
+    When return_idx is True, than a tuple of the indicies used for sliceing
+    and the sliced array are returned.
     '''
     def slicer(idxs, dim_len):
         min = np.clip(idxs.min() - padding, 0, dim_len)
@@ -98,7 +102,10 @@ def extract(arr, threshold=0, padding=0):
         return slice(min, max)
 
     indices = [slicer(a, dim_len) for a,dim_len in zip((arr > threshold).nonzero(), arr.shape)]
-    return arr[indices]
+    if return_idx:
+        return arr[indices], indices
+    else:
+        return arr[indices]
 
 
 def flatten(iterable):
