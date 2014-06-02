@@ -67,7 +67,7 @@ class Fitter(object):
             (the first is the xdata and the rest are parameters to be fit),\
             only %d specified." % len(fitFuncArgs)
 
-        self._paramsToFit = fitFuncArgs[1:]
+        self._xname,self._paramsToFit = fitFuncArgs[0],fitFuncArgs[1:]
 
         assert len(guess) == len(self._paramsToFit), 'len(guess)=%d \
             should equal the number of free parameters to be fit (%d)' % \
@@ -88,7 +88,7 @@ class Fitter(object):
 
         return apply_along_axis(self, x, arr, **kwargs)
 
-    def fit(self, xdata, ydata):
+    def fit(self, xdata, ydata, disp=True):
         '''Find estimates for the parameters of the fitFunc given the 
         initalGuess, xdata and ydata. Thie initalGuess is needed inorder 
         for the nonlinear fitting function to converge. It should be the 
@@ -110,23 +110,22 @@ class Fitter(object):
             popt,pcov = curve_fit(self._fitFunc, xdata, ydata, self._guess)
         except RuntimeError as e:
             successfulFit = False
-            log.warn('Failed to find an appropriate fit, using the default')
-            log.debug(e)
+            if disp:
+                log.warn('Failed to find an appropriate fit, using the default')
+                log.debug(e)
             popt,pcov = self._failedFitFunc(self._guess)
 
         if np.isscalar(pcov):
             successfulFit = False
             assert pcov == np.inf
-            log.warn("Failed to find an appropriate fit, using the default value.")
+            if disp:
+                log.warn("Failed to find an appropriate fit, using the default value.")
             pcov = self._failedFitFunc(self._guess)[1]
         
-        funcArgs = inspect.getargspec(self._fitFunc).args
-        xName,paramNames = funcArgs[0],funcArgs[1:]
-        paramdict = dict(zip(paramNames, popt))
+        paramdict = dict(zip(self._paramsToFit, popt))
 
         fit = Fit(xdata, ydata, popt, paramdict, self._fitFunc, pcov, successfulFit)
         status = 'succeeded' if fit.success else 'FAILED'
-        #log.debug("Fit [%s] params = %s" % (status, fit.paramDict))
         return fit
 
 
@@ -148,7 +147,7 @@ def apply_along_axis(fitter, x, arr, axis=-1, disp=True):
     def fit(y):
         if disp:
             pm.increment()
-        return fitter.fit(x, y).params
+        return fitter.fit(x, y, disp=disp).params
     res = np.apply_along_axis(fit, axis, arr)
     if disp:
         pm.finish()
