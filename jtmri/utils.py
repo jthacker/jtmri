@@ -226,17 +226,19 @@ def similar(s1, s2, threshold=90):
     return fuzz.partial_ratio(s1, s2) >= threshold
 
 
-def filter_error(func, catch=(RuntimeError,)):
-    '''If an exception is thrown, then return False,
-    otherwise return the result of the func.
+def filter_error(func, catch=(RuntimeError,), retval=False):
+    '''Wraps a function and performs the following:
+    Func is called and if an exception is thrown, then return retval,
+    otherwise return the result of calling func.
     Args:
-    func  -- Function to wrap
-    catch -- List of exceptions to catch'''
+    func   -- Function to wrap
+    catch  -- List of exceptions to catch
+    retval -- (default False) Returned value when an exception is caught'''
 
     def _filter_error(*args, **kwargs):
         try:
             res = func(*args, **kwargs)
         except catch:
-            return False
+            return retval
         return res
     return _filter_error
