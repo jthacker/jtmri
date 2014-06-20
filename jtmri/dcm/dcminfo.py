@@ -59,8 +59,8 @@ class Series(object):
         # Use the path as a tag for the rois
         roi_filename = os.path.join(os.path.dirname(dcm['filename']), 'rois', 'series_%2d.h5' % dcm.SeriesNumber)
         if os.path.exists(roi_filename):
-            meta['rois'] = lambda roi_filename=roi_filename: load_roi(roi_filename)
-
+            meta['roi'] = lambda roi_filename=roi_filename: load_roi(roi_filename)
+            meta['roi_filename'] = roi_filename
 
 class GRE(object):
     @staticmethod
