@@ -113,8 +113,8 @@ class DicomSet(object):
     def disp(self):
         disp(self)
 
-    def view(self, groupby=tuple()):
-        return view(self, groupby=groupby)
+    def view(self, groupby=tuple(), roi_filename=None):
+        return view(self, groupby, roi_filename)
 
     def data(self, groupby=tuple()):
         return data(self, field='pixel_array', groupby=groupby)
@@ -266,7 +266,7 @@ def read(path=None, disp=True, recursive=False, progress=lambda x:x):
     A list of dicom objects
     Prints a summary of the dicom objects
     '''
-    path = path if path else os.path.abspath(os.path.curdir)
+    path = os.path.expanduser(path) if path else os.path.abspath(os.path.curdir)
 
     dcmlist = []
     paths = _path_gen(path, recursive)
@@ -316,7 +316,7 @@ def disp(dicomset, extra_headers=tuple()):
         print('Dicom list is empty')
 
 
-def view(dicoms, groupby=tuple()):
+def view(dicoms, groupby=tuple(), roi_filename=None):
     '''Display a dicomset with arrview
     Args:
     dicoms  -- An iterable of dicoms
@@ -328,4 +328,7 @@ def view(dicoms, groupby=tuple()):
     '''
     import arrview
     arr = data(dicoms, field='pixel_array', groupby=groupby)
-    return arrview.view(arr)
+    df = dicoms.first
+    if roi_filename is None and hasattr(df, 'meta') and hasattr(df.meta, 'roi_filename'):
+        roi_filename=df.meta.roi_filename
+    return arrview.view(arr, roi_filename=roi_filename)
