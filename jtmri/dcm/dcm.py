@@ -330,5 +330,7 @@ def view(dicoms, groupby=tuple(), roi_filename=None):
     arr = data(dicoms, field='pixel_array', groupby=groupby)
     df = dicoms.first
     if roi_filename is None and hasattr(df, 'meta') and hasattr(df.meta, 'roi_filename'):
-        roi_filename=df.meta.roi_filename
+        roi_filename = df.meta.roi_filename
+    else:
+        roi_filename = os.path.dirname(df.filename)
     return arrview.view(arr, roi_filename=roi_filename)
