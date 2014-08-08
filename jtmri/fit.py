@@ -7,6 +7,7 @@ from scipy.optimize import curve_fit
 
 from .cache import memoize
 from .utils import ProgressMeter, rep
+from .np import apply_along_axis
 
 log = logging.getLogger('jtmri.fitting')
 
@@ -86,7 +87,7 @@ class Fitter(object):
         if disp is not None:
             kwargs['disp'] = disp
 
-        return apply_along_axis(self, x, arr, **kwargs)
+        return fit_along_axis(self, x, arr, **kwargs)
 
     def fit(self, xdata, ydata, disp=True):
         '''Find estimates for the parameters of the fitFunc given the 
@@ -129,7 +130,7 @@ class Fitter(object):
         return fit
 
 
-def apply_along_axis(fitter, x, arr, axis=-1, disp=True):
+def fit_along_axis(fitter, x, arr, axis=-1, disp=True):
     '''Apply fitter function to arr
     Args:
     fitter -- a function that takes a numpy array of y values and 
@@ -141,21 +142,41 @@ def apply_along_axis(fitter, x, arr, axis=-1, disp=True):
     assert len(x) == arr.shape[axis], 'The length of the x values must be the same ' \
         'as the length of the array along the axis being fit. ' \
         'len(x) != arr.shape[axis] x=%d arr.shape[%d]=%d' % (len(x), axis, arr.shape[axis])
-    total = reduce(op.mul, (d for i,d in enumerate(arr.shape) if i != axis), 1)
-    if disp:
-        pm = ProgressMeter(total, 'Calculating map')
-    def fit(y):
-        if disp:
-            pm.increment()
-        return fitter.fit(x, y, disp=disp).params
-    res = np.apply_along_axis(fit, axis, arr)
-    if disp:
-        pm.finish()
+    #total = reduce(op.mul, (d for i,d in enumerate(arr.shape) if i != axis), 1)
+    res = apply_along_axis(lambda y: fitter.fit(x,y,disp).params, axis, arr)
     return res
 
 
-### Common Fitters ###
-class fitters(object):
-    r2 = Fitter(lambda te, so, r2: so * np.exp(-1 * r2 * te), (1,1))
-    r2star = Fitter(lambda te, so, r2star: so * np.exp(-1 * r2star * te), (1,1))
-    r2prime = Fitter(lambda tau, so, r2prime: so * np.exp(-2 * r2prime * tau), (1,1))
+def fit_r2star_fast(t, arr, axis=-1):
+    '''Fit an r2star decay across the specified axis using a linear least squares fit.
+    arr is transformed to a linear equation by taking the natural logrithm of the
+    R2* decay equation (log(S) = log(So) - log(TE) * R2*).
+    Args:
+    t    -- Echo times in seconds
+    arr  -- N dimensional array of GRE data
+    axis -- (default: -1) Axis that R2* decay occurs on
+
+    Returns:
+    An N-1 dimensional array of R2* fits.
+    '''
+    arr_dims = range(arr.ndim)
+    axis = arr_dims[axis]
+    assert arr.shape[axis] == len(t), 'The length of t (%d) must be equal to the ' \
+            'length of the arr dimension designated by axis (%d).' % (len(t), axis)
+
+    out_shape = [arr.shape[i] for i in arr_dims if i != axis]
+
+    A = np.c_[-1*t, np.ones_like(t)]
+    b = np.log(arr.swapaxes(axis, -1).reshape((-1, len(t)))).T
+    b[np.isinf(b)] = 0
+    fits,residuals,rank,singvals = np.linalg.lstsq(A, b)
+    r2star = fits[0].reshape(out_shape)
+
+    if np.ma.isMaskedArray(arr):
+        r2star = np.ma.array(r2star, mask=np.ma.getmaskarray(arr).all(axis=-1))
+    return r2star
+
+
+fit_r2 = Fitter(lambda te, so, r2: so * np.exp(-1 * r2 * te), (1,1))
+fit_r2star = Fitter(lambda te, so, r2star: so * np.exp(-1 * r2star * te), (1,1))
+fit_r2prime = Fitter(lambda tau, so, r2prime: so * np.exp(-2 * r2prime * tau), (1,1))
