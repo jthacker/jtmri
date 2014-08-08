@@ -1,6 +1,7 @@
 from __future__ import division
 import numpy as np
-import matplotlib.pyplot as plt
+from scipy import stats
+import matplotlib.pyplot as pl
 
 def multi_bar(xlabels, data, yerr, grouplabels, groupcolors, ax=None, padding=0.15):
     Ngroups = len(data)
@@ -11,7 +12,7 @@ def multi_bar(xlabels, data, yerr, grouplabels, groupcolors, ax=None, padding=0.
     width = (1 - padding) / Ngroups
     
     if ax is None:
-        _, ax = plt.subplots()
+        _, ax = pl.subplots()
     
     ind = np.arange(Nx)
     rects = []
@@ -25,15 +26,15 @@ def multi_bar(xlabels, data, yerr, grouplabels, groupcolors, ax=None, padding=0.
     return ax,rects
 
 
-def line(y_intercept, slope, xlimits=None, ax=None):
+def line(y_intercept, slope, xlimits=None, ax=None, plot_kwds={}):
     '''Draw a line by the y-intercept and slope within the limits of the axes'''
     if ax is None:
-        _,ax = plt.subplots()
+        _,ax = pl.subplots()
     if xlimits is None:
         xlimits = ax.get_xlim()
     x = np.linspace(xlimits[0], xlimits[1])
     y = slope * x + y_intercept
-    line = ax.plot(x, y)
+    line = ax.plot(x, y, **plot_kwds)
     return ax,line
 
 
@@ -53,3 +54,11 @@ def adjust_limits(ax, xadj=0.1, yadj=0.1):
     ax.set_xlim(xmin - xadj * xrng, xmax + xadj * xrng)
     ax.set_ylim(ymin - yadj * yrng, ymax + yadj * yrng)
 
+
+def density(arr, samples=1000, plt_kwds=dict(), ax=None):
+    if ax is None:
+        _,ax = pl.subplots()
+    gkde = stats.gaussian_kde(arr)
+    idx = np.linspace(arr.min(), arr.max(), samples)
+    ax.plot(idx, gkde.evaluate(idx), **plt_kwds)
+    ax.set_ylabel('Density')
