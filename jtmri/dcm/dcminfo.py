@@ -1,7 +1,7 @@
 from collections import Sequence
 from glob import iglob
 import os, os.path
-import yaml
+import yaml, copy
 
 from ..utils import AttributeDict, flatten
 from ..roi import load as load_roi 
@@ -10,6 +10,21 @@ from ..roi import load as load_roi
 _sequences = {}
 def _register_seq(name, seqclass):
     _sequences[name] = seqclass
+
+
+def _update_meta(meta_new, meta_old):
+    '''Updates keys in meta_old with values in meta_new.
+    If the key in meta_old is a list, then the values in
+    meta_old for that key are append to meta_old[key].
+    '''
+    for key,val_new in meta_new.items():
+        if key in meta_old:
+            val_old = meta_old[key]
+            if isinstance(val_old, list):
+                assert isinstance(val_new, list)
+                val_old.extend(val_new)
+        else:
+            meta_old[key] = copy.copy(val_new)
 
 
 class Study(object):
@@ -22,7 +37,12 @@ class Study(object):
         return dcm.StudyInstanceUID == self.study
 
     def add_metadata(self, meta, dcm, study_dcms):
-        meta.update(self.meta) 
+        '''Add the metadata in this object to meta.
+        If the old value is a list then the new value is appended to it,
+        rather than just replace the value as would be the case
+        for atomic values.
+        '''
+        _update_meta(self.meta, meta)
 
     def update_metadata(self, study_dcms):
         for dcm in study_dcms:
@@ -45,7 +65,7 @@ class Series(object):
         self.meta = seriesinfo.get('meta', {})
    
     def add_metadata(self, meta, dcm, study_dcms):
-        meta.update(self.meta)
+        _update_meta(self.meta, meta)
         self._add_metadata_seq(meta, dcm, study_dcms) 
         self._add_metadata_rois(meta, dcm)
 
@@ -62,23 +82,33 @@ class Series(object):
             meta['roi'] = lambda roi_filename=roi_filename: load_roi(roi_filename)
             meta['roi_filename'] = roi_filename
 
+
 class GRE(object):
     @staticmethod
     def add_metadata(meta, dcm, study_dcms):
-        # If ucReconstructionMode == '0x8' then phase recon is enabled and there will be another
-        # series following the gre images, which puts the R2* map one more down
-        phase_saved = dcm.Siemens.MrPhoenixProtocol['ucReconstructionMode'] == '0x8'
-        t2star_series_num = dcm.SeriesNumber + (2 if phase_saved else 1)
-        r2star_series_num = dcm.SeriesNumber + (3 if phase_saved else 2)
-        
-        meta.sequence = 'gre'
-        meta.t2star = study_dcms.by_series(t2star_series_num)
-        r2star = study_dcms.by_series(r2star_series_num)
-        if len(r2star) > 0 and 'ImageComments' in r2star.first and r2star.first.ImageComments == 'r2star image':
-            meta.r2star = r2star
+        meta.r2star = None
+        meta.t2star = None
+        if dcm.SoftwareVersions == 'syngo MR D13':
+            phase_saved = dcm.Siemens.MrPhoenixProtocol['ucReconstructionMode'] == '8'
+            for num in [1,2]:
+                num = dcm.SeriesNumber + (num + 1 if phase_saved else num)
+                possible_map = study_dcms.by_series(num)
+                if possible_map.first.SeriesDescription == 'R2Star_Images':
+                    meta.r2star = possible_map
+                if possible_map.first.SeriesDescription == 'T2Star_Images':
+                    meta.t2star = possible_map
         else:
-            meta.r2star = None
-
+            # If ucReconstructionMode == '0x8' then phase recon is enabled and there will be another
+            # series following the gre images, which puts the R2* map one more down
+            phase_saved = dcm.Siemens.MrPhoenixProtocol['ucReconstructionMode'] == '0x8'
+            t2star_series_num = dcm.SeriesNumber + (2 if phase_saved else 1)
+            r2star_series_num = dcm.SeriesNumber + (3 if phase_saved else 2)
+            
+            meta.sequence = 'gre'
+            meta.t2star = study_dcms.by_series(t2star_series_num)
+            r2star = study_dcms.by_series(r2star_series_num)
+            if len(r2star) > 0 and 'ImageComments' in r2star.first and r2star.first.ImageComments == 'r2star image':
+                meta.r2star = r2star
 _register_seq('gre', GRE)
 
 
@@ -117,7 +147,7 @@ def read(path, recursive):
 
 
 def update_metadata(study_infos, dcms):
-    for study_dcms in dcms.studies():
+    for study in dcms.studies():
         for info in study_infos:
-            if info.matches(study_dcms.first):
-                info.update_metadata(study_dcms)
+            if info.matches(study.first):
+                info.update_metadata(study)
