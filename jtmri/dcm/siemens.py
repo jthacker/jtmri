@@ -2,7 +2,7 @@ import struct
 import re
 from collections import namedtuple
 import logging
-log = logging.getLogger()
+log = logging.getLogger('siemens')
 
 _mdhFields = (
     ('FlagsAndDMALength'    ,0,   'L'),
@@ -192,10 +192,12 @@ class SiemensProtocol(object):
         return seriesData
 
     def __init__(self, protocolStr):
-        startToken = '### ASCCONV BEGIN ###'
-        endToken = '### ASCCONV END ###'
-        start = protocolStr.find(startToken) + len(startToken) 
-        end = protocolStr.find(endToken) - 1
+        startToken = 'ASCCONV BEGIN'
+        endToken = 'ASCCONV END'
+        start = protocolStr.find('\n', protocolStr.find(startToken)) + 1
+        end = protocolStr.rfind('\n', 0, protocolStr.find(endToken)) - 1
+        assert -1 < start < end < len(protocolStr)
+
         self._rawProtocol = protocolStr[start:end].split('\n')
         if self._rawProtocol[0] == '':
             self._rawProtocol = self._rawProtocol[1:]
