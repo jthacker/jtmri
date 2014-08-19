@@ -1,7 +1,7 @@
 import numpy as np 
 import pylab as plt 
 from fuzzywuzzy import fuzz
-import os, sys, logging, csv, re, itertools, collections
+import os, sys, logging, csv, re, itertools, collections, copy
 
 
 log = logging.getLogger('jtmri.utils')
@@ -116,11 +116,21 @@ def flatten(iterable):
 class AttributeDict(object):
     '''A dictionary that can have its keys accessed as if they are attributes'''
     def __init__(self, dic):
+        # Since this class implement __setattr__, class params have to be set 
+        # specially.
         self.__dict__['_dict'] = dic
-        self.values = dic.values
-        self.keys = dic.keys
-        self.get = dic.get
-        self.iteritems = dic.iteritems
+
+    def values(self):
+        return self._dict.values()
+
+    def keys(self):
+        return self._dict.keys()
+
+    def get(self, val, default=None):
+        return self._dict.get(val, default)
+
+    def iteritems(self):
+        return self._dict.iteritems()
     
     def __dir__(self):
         return sorted(set(dir(type(self)) + self._dict.keys()))
@@ -146,6 +156,9 @@ class AttributeDict(object):
     def update(self, *args, **kwargs):
         self._dict.update(*args, **kwargs)
         return self
+
+    def dict(self):
+        return copy.deepcopy(self._dict)
 
     def __iter__(self):
         return self._dict.__iter__()
