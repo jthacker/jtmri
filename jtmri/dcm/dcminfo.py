@@ -88,6 +88,7 @@ class GRE(object):
     def add_metadata(meta, dcm, study_dcms):
         meta.r2star = None
         meta.t2star = None
+        meta.sequence = 'gre'
         if dcm.SoftwareVersions == 'syngo MR D13':
             phase_saved = dcm.Siemens.MrPhoenixProtocol['ucReconstructionMode'] == '8'
             for num in [1,2]:
@@ -104,7 +105,6 @@ class GRE(object):
             t2star_series_num = dcm.SeriesNumber + (2 if phase_saved else 1)
             r2star_series_num = dcm.SeriesNumber + (3 if phase_saved else 2)
             
-            meta.sequence = 'gre'
             meta.t2star = study_dcms.by_series(t2star_series_num)
             r2star = study_dcms.by_series(r2star_series_num)
             if len(r2star) > 0 and 'ImageComments' in r2star.first and r2star.first.ImageComments == 'r2star image':
