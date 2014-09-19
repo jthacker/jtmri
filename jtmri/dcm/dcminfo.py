@@ -94,10 +94,11 @@ class GRE(object):
             for num in [1,2]:
                 num = dcm.SeriesNumber + (num + 1 if phase_saved else num)
                 possible_map = study_dcms.by_series(num)
-                if possible_map.first.SeriesDescription == 'R2Star_Images':
-                    meta.r2star = possible_map
-                if possible_map.first.SeriesDescription == 'T2Star_Images':
-                    meta.t2star = possible_map
+                if possible_map.count > 0:
+                    if possible_map.first.SeriesDescription == 'R2Star_Images':
+                        meta.r2star = possible_map
+                    if possible_map.first.SeriesDescription == 'T2Star_Images':
+                        meta.t2star = possible_map
         else:
             # If ucReconstructionMode == '0x8' then phase recon is enabled and there will be another
             # series following the gre images, which puts the R2* map one more down
