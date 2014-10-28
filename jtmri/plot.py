@@ -62,3 +62,13 @@ def density(arr, samples=1000, plt_kwds=dict(), ax=None):
     idx = np.linspace(arr.min(), arr.max(), samples)
     ax.plot(idx, gkde.evaluate(idx), **plt_kwds)
     ax.set_ylabel('Density')
+
+
+def imshow(img, imshow_args={}, title='', label='', ax=None):
+    '''Wrapper around matplotlib.imshow but with better defaults'''
+    if ax is None:
+        fig,ax = pl.subplots()
+    cax = ax.imshow(img, **imshow_args)
+    ax.axis('off')
+    cb = pl.colorbar(cax, label=label)
+    return ax,cb
