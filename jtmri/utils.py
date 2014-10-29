@@ -116,8 +116,6 @@ def flatten(iterable):
 class AttributeDict(object):
     '''A dictionary that can have its keys accessed as if they are attributes'''
     def __init__(self, dic):
-        # Since this class implement __setattr__, class params have to be set 
-        # specially.
         self.__dict__['_dict'] = dic
 
     def values(self):
@@ -142,7 +140,7 @@ class AttributeDict(object):
         self._dict[key] = val
 
     def __getattr__(self, key):
-        if key in self._dict:
+        if '_dict' in self.__dict__ and key in self._dict:
             return self._dict[key]
         else:
             raise AttributeError("'AttributeDict' object has no attribute %r" % key)
@@ -151,7 +149,7 @@ class AttributeDict(object):
         if not key.startswith('_'):
             self._dict[key] = val
         else:
-            raise AttributeError("'AttributeDict' object has no attribute %r" % key)
+            super(object, self).__setattr__(key, val)
 
     def update(self, *args, **kwargs):
         self._dict.update(*args, **kwargs)
@@ -177,7 +175,9 @@ class DefaultAttributeDict(AttributeDict):
         self.__dict__['_dict'] = collections.defaultdict(DefaultAttributeDict, dict(*args, **kwargs))
         
 
-def asiterable(val):
+def as_iterable(val):
+    '''If val is not iterable then return it wrapped in a list,
+    otherewise just return val'''
     if not isinstance(val, collections.Iterable):
         return [val]
     else:

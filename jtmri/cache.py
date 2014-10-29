@@ -3,28 +3,70 @@ import numpy as np
 from decorator import decorator
 from UserDict import DictMixin
 from hashlib import sha1
+from collections import namedtuple
 import logging
+import shutil
+import os.path
 
 log = logging.getLogger('jtmri.cache')
 
+
+StoreInfo = namedtuple('StoreInfo', 'used_memory')
+
+
+class DirectoryStore(object):
+    '''DirectoryStore uses the filesystem as a hash table.
+    It is currently not safe for concurrent usage.
+    '''
+    def __init__(self, path):
+        self.path = os.path.expanduser(path)
+        if not os.path.exists(self.path):
+            os.makedirs(self.path)
+
+    def _key_path(self, key):
+        return os.path.join(self.path, str(key))
+
+    def _item_path(self, key):
+        return os.path.join(self._key_path(key), 'data')
+
+    def contains(self, key):
+        return os.path.isdir(self._key_path(key))
+
+    def delete_item(self, key):
+        shutil.rmtree(self._key_path(key))
+
+    def set_item(self, key, item):
+        if not self.contains(key):
+            os.makedirs(self._key_path(key))
+        with open(self._item_path(key), 'w') as f:
+            f.write(item)
+            f.flush()
+            f.close()
+
+    def get_item(self, key):
+        item = None
+        if self.contains(key):
+            with open(self._item_path(key)) as f:
+                item = f.read()
+                f.close()
+        return item
+
+    def info(self):
+        return StoreInfo(0)
+
+    def keys(self):
+        return os.listdir(self.path)
+
+
 class Cache(DictMixin):
-    def __init__(self):
-        self._redis = redis.Redis()
+    def __init__(self, store):
+        self._store = store
 
     def __contains__(self, key):
-        try:
-            hasKey = key in self._redis
-        except redis.exceptions.ConnectionError as e:
-            hasKey = False
-            log.warn("[Cache Error] Unable to connect to redis: (%s)" % e.message)
-        
-        return hasKey
+        return self._store.contains(key)
 
     def _stats(self):
-        info = self._redis.info()
-        msg = "mem usage: %s (peak %s)" % \
-                (info['used_memory_human'], info['used_memory_peak_human'])
-        return msg
+        return self._store.info()
 
     def _log(self, key, msg):
         log.debug("[CACHE %s] %s [%s]" % (key, msg, self._stats()))
@@ -33,24 +75,28 @@ class Cache(DictMixin):
         '''According to the doc for __getitem__, if a key is missing then
         a KeyError should be raised.'''
         self._log('GET', "key=%s" % str(key))
-
-        val = self._redis.get(key)
+        val = self._store.get_item(key)
         if not val:
             raise KeyError(key)
         return pickle.loads(val) if val else None
 
     def __setitem__(self, key, item):
         self._log('SET', "key=%s" % str(key))
-        self._redis.set(key, pickle.dumps(item, pickle.HIGHEST_PROTOCOL))
+        self._store.set_item(key, pickle.dumps(item, pickle.HIGHEST_PROTOCOL))
 
     def __delitem__(self, key):
         '''According to the doc for __delitem__, if a key is missing then
         a KeyError should be raised'''
         self._log('REM', "key=%s" % str(key))
-        self._redis.delete(key)
+        self._store.delete_item(key)
 
     def keys(self):
-        return self._redis.keys()
+        return self._store.keys()
+
+    def purge(self):
+        '''Delete all cached items'''
+        for key in self.keys():
+            self._store.delete_item(key)
 
 
 DictProxyType = type(object.__dict__)
@@ -93,14 +139,6 @@ def make_hash(o):
     return hash(tuple(frozenset(o.items())))  
 
 
-try:
-    import redis
-    _cache = Cache()
-except:
-    log.warn('redis module not installed, using local cache only')
-    _cache = {}
-
-
 def func_hash(func, args, kwargs):
     '''hash a function and its arg and kwargs.
     Uses just the byte code of the function for comparison so two different
@@ -108,6 +146,9 @@ def func_hash(func, args, kwargs):
     '''
     keyHash = sha1(str(make_hash((func.__code__.co_code, args, kwargs))))
     return keyHash.hexdigest()
+
+
+cache = Cache(DirectoryStore('~/.local/share/jtmri'))
 
 
 @decorator
@@ -122,8 +163,8 @@ def memoize(func, *args, **kwargs):
     fhash = func_hash(func, args, kwargs)
     key = '%s:%s' % (func.func_name, fhash)
 
-    if key in _cache:
-        result = _cache[key]
+    if key in cache:
+        result = cache[key]
     else:
-        result = _cache[key] = func(*args, **kwargs)
+        result = cache[key] = func(*args, **kwargs)
     return result
