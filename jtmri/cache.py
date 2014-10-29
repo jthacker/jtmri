@@ -11,7 +11,7 @@ import os.path
 log = logging.getLogger('jtmri.cache')
 
 
-StoreInfo = namedtuple('StoreInfo', 'used_memory')
+StoreInfo = namedtuple('StoreInfo', 'disk_used,mem_used')
 
 
 class DirectoryStore(object):
@@ -28,6 +28,14 @@ class DirectoryStore(object):
 
     def _item_path(self, key):
         return os.path.join(self._key_path(key), 'data')
+
+    def get_size(self, path):
+        total_size = 0
+        for dirpath, dirnames, filenames in os.walk(path):
+            for f in filenames:
+                fp = os.path.join(dirpath, f)
+                total_size += os.path.getsize(fp)
+        return total_size
 
     def contains(self, key):
         return os.path.isdir(self._key_path(key))
@@ -52,7 +60,7 @@ class DirectoryStore(object):
         return item
 
     def info(self):
-        return StoreInfo(0)
+        return StoreInfo(disk_used=self.get_size(self.path), mem_used=0)
 
     def keys(self):
         return os.listdir(self.path)
@@ -65,11 +73,11 @@ class Cache(DictMixin):
     def __contains__(self, key):
         return self._store.contains(key)
 
-    def _stats(self):
+    def stats(self):
         return self._store.info()
 
     def _log(self, key, msg):
-        log.debug("[CACHE %s] %s [%s]" % (key, msg, self._stats()))
+        log.debug("[CACHE %s] %s [%s]" % (key, msg, self.stats()))
 
     def __getitem__(self, key):
         '''According to the doc for __getitem__, if a key is missing then
@@ -148,7 +156,7 @@ def func_hash(func, args, kwargs):
     return keyHash.hexdigest()
 
 
-cache = Cache(DirectoryStore('~/.local/share/jtmri'))
+cache = Cache(DirectoryStore('~/.local/share/jtmri/cache'))
 
 
 @decorator
