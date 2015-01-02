@@ -77,10 +77,19 @@ class Series(object):
         # TODO: Read all rois from here that match the series number
         # If there are directories then recurse down into them
         # Use the path as a tag for the rois
-        roi_filename = os.path.join(os.path.dirname(dcm['filename']), 'rois', 'series_%2d.h5' % dcm.SeriesNumber)
-        if os.path.exists(roi_filename):
-            meta['roi'] = load_roi(roi_filename)
-            meta['roi_filename'] = roi_filename
+        rois = {}
+        roi_files = {}
+        rois_dir = os.path.join(os.path.dirname(dcm['filename']), 'rois')
+        for dirpath, dirnames, filenames in os.walk(rois_dir):
+            for filename in filenames:
+                if filename == 'series_%2d.h5' % dcm.SeriesNumber:
+                    roi_file = os.path.join(dirpath, filename)
+                    tag = os.path.relpath(dirpath, rois_dir)
+                    tag = '/' if tag == '.' else '/' + tag
+                    rois[tag] = load_roi(roi_file)
+                    roi_files[tag] = roi_file
+        meta['roi'] = rois
+        meta['roi_filename'] = roi_files
 
 
 class GRE(object):
@@ -148,6 +157,8 @@ def read(path, recursive):
 
 
 def update_metadata(study_infos, dcms):
+    for dcm in dcms:
+        dcm.meta = AttributeDict({})
     for study in dcms.studies():
         for info in study_infos:
             if info.matches(study.first):

@@ -113,8 +113,8 @@ class DicomSet(object):
     def disp(self):
         disp(self)
 
-    def view(self, groupby=tuple(), roi_filename=None):
-        return view(self, groupby, roi_filename)
+    def view(self, groupby=tuple(), roi_filename=None, roi_tag=None):
+        return view(self, groupby, roi_filename, roi_tag)
 
     def data(self, groupby=tuple()):
         return data(self, field='pixel_array', groupby=groupby)
@@ -225,7 +225,7 @@ def data(iterable, field, groupby=tuple(), reshape=True):
     >>> data(dcms, field='pixel_array', groupby=('SliceLocation',)).shape
     (64,64,5,3)
     '''
-    groupby = tuple(groupby)
+    groupby = (groupby,) if isinstance(groupby, basestring) else tuple(groupby)
     obj = list(iterable)
     if len(obj) > 0:
         groupby = groupby + ('*',) if '*' not in groupby else groupby
@@ -306,21 +306,26 @@ def disp(dicomset, extra_headers=tuple()):
             print('StudyID: %r' % st.StudyID)
             print('StudyInstanceUID: %r' % st.StudyInstanceUID)
             
-            t = PrettyTable(_headers + ('Count',))
+            t = PrettyTable(_headers + ('Count','ROI'))
             t.align = 'l'
             for series in study.series():
                 se = series.first
-                t.add_row([se.get(h) for h in _headers] + [series.count])
+                has_rois = se.meta.get('roi')
+                t.add_row([se.get(h) for h in _headers] + [series.count, '*' if has_rois else ''])
             print('%s\n' % t)
     else:
         print('Dicom list is empty')
 
 
-def view(dicoms, groupby=tuple(), roi_filename=None):
+def view(dicoms, groupby=tuple(), roi_filename=None, roi_tag='/'):
     '''Display a dicomset with arrview
     Args:
     dicoms  -- An iterable of dicoms
     groupby -- Before displaying, group the dicoms (see data function)
+    roi_filename -- Filename of rois to load. If not specified and the dicomset
+                    has rois, then those are loaded instead.
+    roi_tag -- (default: '/') When using the rois from the dicomset, 
+               this is the roi tag to load.
 
     Returns:
     Displays the dicoms using arrview and returns the instance once
@@ -329,8 +334,8 @@ def view(dicoms, groupby=tuple(), roi_filename=None):
     import arrview
     arr = data(dicoms, field='pixel_array', groupby=groupby)
     df = dicoms.first
-    if roi_filename is None and hasattr(df, 'meta') and hasattr(df.meta, 'roi_filename'):
-        roi_filename = df.meta.roi_filename
+    if roi_filename is None and df.meta.get('roi_filename'):
+        roi_filename = df.meta.roi_filename.get(roi_tag)
     else:
         roi_filename = os.path.dirname(df.filename)
     return arrview.view(arr, roi_filename=roi_filename)
