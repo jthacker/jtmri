@@ -13,6 +13,8 @@ import numpy.core.umath as umath
 from numpy.lib.index_tricks import AxisConcatenator
 from numpy.linalg import lstsq
 
+import jtmri.utils
+
 
 def flatten_inplace(seq):
     """Flatten a sequence in place."""
@@ -118,3 +120,66 @@ def apply_along_axis(func1d, axis, arr, *args, **kwargs):
     return result
 apply_along_axis.__doc__ = np.apply_along_axis.__doc__
 
+
+def flatten_axes(a, axis, keepdims=False):
+    '''A view of the input array with the specified axes collapsed into
+    the first specified axis.
+
+    Args:
+    a    -- array to be flattened
+    axis -- int or tuple of ints indicating axes to be flattened.
+
+    Returns:
+    A view of the input array with the specified axes collapsed into
+    the first specified axis.
+
+    Examples:
+    >>> import numpy as np
+    >>> x = np.ones((5,4,3,2,1))
+    >>> flatten_axes(x, axis=(0,1)).shape
+    (20, 3, 2, 1)
+    >>> flatten_axes(x, axis=(0,1), keepdims=True).shape
+    (20, 1, 3, 2, 1)
+    >>> flatten_axes(x, axis=(0,1,2,3,4), keepdims=True).shape
+    (120, 1, 1, 1, 1)
+    >>> flatten_axes(x, axis=(0,1,2,3,4)).shape
+    (120,)
+    >>> np.array_equal(x.flatten(), flatten_axes(x, axis=(0,1,2,3,4)))
+    True
+    '''
+    axes = np.array(sorted(jtmri.utils.as_iterable(axis)))
+    out_shape = np.array(a.shape)
+    out_shape[axes[0]] = -1
+    if keepdims:
+        out_shape[axes[1:]] = 1
+    else:
+        diff = [i for i in range(a.ndim) if i not in axes[1:]]
+        out_shape = out_shape[diff]
+
+    # Preserve the ordering from the input array
+    return a.reshape(out_shape, order='A')
+
+
+def apply_to_axes(func, a, axis, keepdims=False):
+    '''Apply func to a flattened version of a.
+
+    Args:
+    func    -- function to apply, takes array and returns scalar, must accept
+               kwarg axis, indicating which axis to act on.
+    a       -- array to apply function to
+    axis    -- axis to apply function over
+
+    Returns:
+    The result of applying func to the input array flattened along the specified axes.
+
+    Examples:
+    >>> import numpy as np
+    >>> x = np.ones((5,4,3,2,1))
+    >>> apply(np.sum, x, axis=(0,1)).shape
+    (3, 2, 1)
+    >>> apply(np.sum, x, axis=(0,1,2))
+    np.array([[60.],
+              [60.]])
+    '''
+    axes = np.array(sorted(jtmri.utils.as_iterable(axis)))
+    return func(flatten_axes(a, axis, keepdims), axis=axes[0])

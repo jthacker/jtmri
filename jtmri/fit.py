@@ -141,7 +141,7 @@ def fit_along_axis(fitter, x, arr, axis=-1, disp=True):
     axis = np.arange(arr.ndim)[axis]
     assert len(x) == arr.shape[axis], 'The length of the x values must be the same ' \
         'as the length of the array along the axis being fit. ' \
-        'len(x) != arr.shape[axis] x=%d arr.shape[%d]=%d' % (len(x), axis, arr.shape[axis])
+        'len(x) != arr.shape[axis] len(x)=%d arr.shape[%d]=%d' % (len(x), axis, arr.shape[axis])
     #total = reduce(op.mul, (d for i,d in enumerate(arr.shape) if i != axis), 1)
     res = apply_along_axis(lambda y: fitter.fit(x,y,disp).params, axis, arr)
     return res
