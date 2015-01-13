@@ -138,24 +138,37 @@ class ROISet(object):
         self.rois = rois
 
     def by_name(self, *names):
+        '''Filter ROIs by names'''
         return ROISet(filter(lambda r: r.name in names, self.rois))
 
     def to_mask(self, shape, collapse=False):
+        '''Create a mask from the ROIs'''
         masks = map(lambda a: a.to_mask(shape, collapse), self)
         return reduce(np.logical_or, masks) 
 
+    def to_masked(self, array, collapse=False):
+        '''Returns a numpy masked array'''
+        return np.ma.array(array, mask=~self.to_mask(array.shape, collapse))
+
+    def to_masked_dict(self, array, collapse=False):
+        '''Returns a dict mapping roi names to masked numpy arrays'''
+        return {name:self.by_name(name).to_masked(array, collapse) for name in self.names}
+
     @property
     def names(self):
+        '''Returns a unique set of names from the rois in this object'''
         return set(r.name for r in self.rois)
 
     @property
     def count(self):
+        '''Returns the total number of ROIs in this object'''
         return len(self.rois)
 
     def __len__(self):
         return self.count
 
     def __iter__(self):
+        '''Returns an iterator over the ROIs in this object'''
         return iter(self.rois)
 
 
