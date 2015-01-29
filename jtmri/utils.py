@@ -1,5 +1,6 @@
 import numpy as np 
 import pylab as plt 
+import collections
 from fuzzywuzzy import fuzz
 import os, sys, logging, csv, re, itertools, collections, copy
 
@@ -113,66 +114,73 @@ def flatten(iterable):
     return (x for sublst in iterable for x in sublst)
 
 
-class AttributeDict(object):
+class Lazy(object):
+    '''A lazy loaded field'''
+    def __init__(self, func):
+        self._func = func
+
+    def __call__(self, *args, **kwargs):
+        return self._func(*args, **kwargs)
+
+
+class AttributeDict(collections.MutableMapping):
     '''A dictionary that can have its keys accessed as if they are attributes'''
+    # Prevents an inifinite recursion in __getattr__ when loaded by pickle.
+    # Pickle does not call the __init__ method and so there will be no _store
+    # attribute when __getattr__ is called. __getattr__ requests the _store
+    # attribute and since this does not exist, __getattr__ will be called again
+    # to resolve the missing attribute, leading to an infinite recursion.
+    _store = {}  
+
     def __init__(self, dic):
-        self.__dict__['_dict'] = dic
-
-    def values(self):
-        return self._dict.values()
-
-    def keys(self):
-        return self._dict.keys()
-
-    def get(self, val, default=None):
-        return self._dict.get(val, default)
-
-    def iteritems(self):
-        return self._dict.iteritems()
-    
-    def __dir__(self):
-        return sorted(set(dir(type(self)) + self._dict.keys()))
+        self.__dict__['_store'] = dic
 
     def __getitem__(self, key):
-        return self._dict[key]
+        val = self._store[key]
+        if isinstance(val, Lazy):
+            val = val()
+            self.__setitem__(key, val)
+        return val
 
     def __setitem__(self, key, val):
-        self._dict[key] = val
+        self._store[key] = val
+
+    def __delitem__(self, key):
+        del self._store[key]
+
+    def __iter__(self):
+        return iter(self._store)
+
+    def __len__(self):
+        return len(self._store)
 
     def __getattr__(self, key):
-        if '_dict' in self.__dict__ and key in self._dict:
-            return self._dict[key]
+        if key in self._store:
+            return self.__getitem__(key)
         else:
             raise AttributeError("'AttributeDict' object has no attribute %r" % key)
 
     def __setattr__(self, key, val):
         if not key.startswith('_'):
-            self._dict[key] = val
+            self._store[key] = val
         else:
             super(object, self).__setattr__(key, val)
 
-    def update(self, *args, **kwargs):
-        self._dict.update(*args, **kwargs)
-        return self
+    def __dir__(self):
+        return sorted(set(dir(type(self)) + self.keys()))
 
     def dict(self):
-        return copy.deepcopy(self._dict)
-
-    def __iter__(self):
-        return self._dict.__iter__()
-
-    def __delitem__(self, key):
-        del self._dict[key]
+        return copy.deepcopy(self._store)
    
     def __str__(self):
-        return 'AttributeDict(' + str(self._dict) + ')'
+        return 'AttributeDict(' + str(self._store) + ')'
 
 
 class DefaultAttributeDict(AttributeDict):
-    '''An AttriuteDict that returns attribute dicts that returns attribute dicts ...
+    '''An AttriuteDict that returns attribute dicts that return attribute dicts ...
     when keys are missing'''
     def __init__(self, *args, **kwargs):
-        self.__dict__['_dict'] = collections.defaultdict(DefaultAttributeDict, dict(*args, **kwargs))
+        self.__dict__['_store'] = collections.defaultdict(DefaultAttributeDict, dict(*args, **kwargs))
         
 
 def as_iterable(val):

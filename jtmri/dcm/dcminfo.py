@@ -95,8 +95,8 @@ class Series(object):
 class GRE(object):
     @staticmethod
     def add_metadata(meta, dcm, study_dcms):
-        meta.r2star = None
-        meta.t2star = None
+        meta.r2star_series = None
+        meta.t2star_series = None
         meta.sequence = 'gre'
         if dcm.SoftwareVersions == 'syngo MR D13':
             phase_saved = dcm.Siemens.MrPhoenixProtocol['ucReconstructionMode'] == '8'
@@ -105,9 +105,9 @@ class GRE(object):
                 possible_map = study_dcms.by_series(num)
                 if possible_map.count > 0:
                     if possible_map.first.SeriesDescription == 'R2Star_Images':
-                        meta.r2star = possible_map
+                        meta.r2star_series = num
                     if possible_map.first.SeriesDescription == 'T2Star_Images':
-                        meta.t2star = possible_map
+                        meta.t2star_series = num
         else:
             # If ucReconstructionMode == '0x8' then phase recon is enabled and there will be another
             # series following the gre images, which puts the R2* map one more down
@@ -115,10 +115,10 @@ class GRE(object):
             t2star_series_num = dcm.SeriesNumber + (2 if phase_saved else 1)
             r2star_series_num = dcm.SeriesNumber + (3 if phase_saved else 2)
             
-            meta.t2star = study_dcms.by_series(t2star_series_num)
+            meta.t2star_series = t2star_series_num
             r2star = study_dcms.by_series(r2star_series_num)
             if len(r2star) > 0 and 'ImageComments' in r2star.first and r2star.first.ImageComments == 'r2star image':
-                meta.r2star = r2star
+                meta.r2star_series = r2star_series_num
 _register_seq('gre', GRE)
 
 

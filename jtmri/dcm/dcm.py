@@ -2,6 +2,8 @@ from __future__ import absolute_import
 from glob import iglob
 import os, dicom, logging
 import numpy as np
+import copy
+import cPickle as pickle
 
 from itertools import ifilter
 from collections import defaultdict, Iterable
@@ -9,12 +11,14 @@ from prettytable import PrettyTable
 from tqdm import tqdm
 
 from .siemens import SiemensProtocol
-from ..utils import unique, AttributeDict, ListAttrAccessor
+from ..utils import unique, AttributeDict, ListAttrAccessor, Lazy
 from . import dcminfo
 
 
 log = logging.getLogger('jtmri:dicom')
 
+
+CACHE_FILE_NAME = '.cache'
 
 class DicomParser(object):
     @staticmethod
@@ -118,7 +122,7 @@ class DicomSet(object):
 
     def data(self, groupby=tuple()):
         return data(self, field='pixel_array', groupby=groupby)
-    
+   
     @property
     def count(self):
         return len(self)
@@ -241,9 +245,11 @@ def data(iterable, field, groupby=tuple(), reshape=True):
 
 
 def _path_gen(path, recursive):
+    path = os.path.expanduser(path) if path else os.path.abspath(os.path.curdir)
+
     if os.path.isdir(path):
         path = os.path.join(path, '*') 
-
+    
     for path in iglob(path):
         if recursive and os.path.isdir(path):
             for root,_,files in os.walk(path):
@@ -253,38 +259,123 @@ def _path_gen(path, recursive):
             yield path
 
 
-def read(path=None, disp=True, recursive=False, progress=lambda x:x):
+def _store_cache(dicomset, filename):
+    '''Store a list of dicoms as a pickle object to filename
+    Args:
+        dicoms      -- An iterable of dicoms
+        filename    -- Name of file to store the dicoms in
+    The pixel arrays are dropped from the dicoms to minimize the
+    cached file size. They are then lazy loaded after being unpickled.
+    '''
+    dcms = []
+    for dcm in dicomset:
+        d = copy.deepcopy(dcm)
+        del d['pixel_array']
+        dcms.append(d)
+    with open(filename, 'w') as f:
+        pickle.dump(dcms, f, pickle.HIGHEST_PROTOCOL)
+
+
+def _load_cache(filename):
+    '''Load a list of dicoms from a pickle object
+    Args:
+        filename    -- Filename of pickle object to load dicoms from
+
+    Returns: A list of dicoms from the objects stored in the pickle object
+    '''
+    dcms = []
+    with open(filename, 'r') as f:
+        dcms = pickle.load(f)
+
+    for dcm in dcms:
+        dcm.pixel_array = Lazy(lambda dcm=dcm: dicom.read_file(dcm.filename).pixel_array)
+    return dcms
+
+
+def _get_cached(cache, path):
+    if path in cache:
+        return cache[path]
+    dirname = os.path.dirname(path)
+    cache_file = os.path.join(dirname, CACHE_FILE_NAME)
+    if os.path.exists(cache_file):
+        for dcm in _load_cache(cache_file):
+            cache[dcm.filename] = dcm
+        return cache[path]
+
+
+def read(path=None, disp=True, recursive=False, progress=lambda x:x, use_info=True, use_cache=True):
     '''Read dicom files from path and print a summary
     Args:
-    path      -- glob like path of dicom files, if None then the current dir is used
-    info_path -- path to read info.yaml file from
-    disp      -- (default: True) Print a summary
-    recursive -- (default: False) Recurse into subdirectories
-    progress  -- (default: None) Callback function, takes one argument (# dicoms read)
+        path         -- glob like path of dicom files, if None then the current dir is used
+        disp         -- (default: True) Print a summary
+        recursive    -- (default: False) Recurse into subdirectories
+        progress     -- (default: None) Callback function, takes one argument (# dicoms read)
+        use_info     -- (default: True) Load info from dicom info files (info.yaml)
+        use_cache    -- (default: True) Use cached files to quickly load dicoms
 
     Returns:
-    A list of dicom objects
-    Prints a summary of the dicom objects
+        Returns a list of dicom objects. Prints a summary of the dicom objects
     '''
-    path = os.path.expanduser(path) if path else os.path.abspath(os.path.curdir)
-
     dcmlist = []
     paths = _path_gen(path, recursive)
     paths = tqdm(paths) if disp else paths
+    cache = {}
     for p in paths:
         if isdicom(p):
-            progress(len(dcmlist))
-            dcm = DicomParser.to_attributedict(dicom.read_file(p))
-            dcm.filename = p
+            dcm = _get_cached(cache, p) if use_cache else None
+            if dcm is None:
+                dcm = DicomParser.to_attributedict(dicom.read_file(p))
+                dcm.filename = p
+                log.debug('loaded from disk %s' % p)
+            else:
+                log.debug('loaded from cache %s' % p)
             dcmlist.append(dcm)
+        else:
+            log.debug('ignoring file %s' % p)
+            continue
+        progress(len(dcmlist))
 
-    infos = dcminfo.read(path, recursive) 
     dicomset = DicomSet(dcmlist)
-    dcminfo.update_metadata(infos, dicomset)
+
+    if use_info:
+        infos = dcminfo.read(path, recursive) 
+        dcminfo.update_metadata(infos, dicomset)
 
     if disp:
         dicomset.disp()
     return dicomset
+
+
+def _path_gen_dirs(path, recursive):
+    path = os.path.expanduser(path) if path else os.path.abspath(os.path.curdir)
+    for p in iglob(path):
+        if os.path.isdir(p):
+            if recursive:
+                for root,_,_ in os.walk(p):
+                    yield root
+            else:
+                yield p
+
+
+def cache(path=None, recursive=False, disp=True):
+    '''Generate dicom cache files for each directory
+    Args:
+        path      -- (default: Current directory) path to find dicoms in.
+        recursive -- (default: False) Recurse into subdirectories
+        disp      -- (default: True) Display the progress of the cache generation
+
+    This command will search for directories containing dicom files and
+    create a cache file for each directory.
+    '''
+    paths = _path_gen_dirs(path, recursive)
+    paths = tqdm(paths) if disp else paths
+
+    for d in paths:
+        dcms = read(d, use_info=False, use_cache=False, disp=False)
+        if len(dcms) > 0:
+            p = os.path.join(d, CACHE_FILE_NAME)
+            log.debug('writing cache to %s' % p)
+            _store_cache(dcms, p)
 
 
 def disp(dicomset, extra_headers=tuple()):
@@ -339,3 +430,4 @@ def view(dicoms, groupby=tuple(), roi_filename=None, roi_tag='/'):
     else:
         roi_filename = os.path.dirname(df.filename)
     return arrview.view(arr, roi_filename=roi_filename)
+
