@@ -11,7 +11,7 @@ from prettytable import PrettyTable
 
 from .siemens import SiemensProtocol
 from ..progress_meter import progress_meter_ctx
-from ..utils import unique, AttributeDict, ListAttrAccessor, Lazy
+from ..utils import unique, AttributeDict, ListAttrAccessor, Lazy, is_sequence
 from . import dcminfo
 
 
@@ -115,8 +115,8 @@ class DicomSet(object):
         for sid in unique(self.all.StudyInstanceUID):
             yield self.filter(lambda d: d.StudyInstanceUID == sid)
 
-    def disp(self):
-        disp(self)
+    def disp(self, extra_columns=tuple()):
+        disp(self, extra_columns)
 
     def view(self, groupby=tuple(), roi_filename=None, roi_tag=None):
         return view(self, groupby, roi_filename, roi_tag)
@@ -306,6 +306,7 @@ def _get_cached(cache, path):
     dirname = os.path.dirname(path)
     cache_filename = os.path.join(dirname, CACHE_FILE_NAME)
     if os.path.exists(cache_filename):
+        log.debug('loading cache %s' % cache_filename)
         for dcm in _load_cache(cache_filename):
             key = os.path.relpath(dcm.filename, cache_filename)
             cache[dcm.filename] = dcm
@@ -322,12 +323,11 @@ def read(path=None, disp=True, recursive=False, progress=lambda x:x, use_info=Tr
         progress  -- (default: None) One arg callback function (# dicoms read)
         use_info  -- (default: True) Load info from dicom info files (info.yaml)
         use_cache -- (default: True) Use cached files to quickly load dicoms
-    Returns:
-        Returns a list of dicom objects. Prints a summary of the dicom objects
+    Returns: A list of dicom objects. Prints a summary of the dicom objects if disp is True
     '''
     dcmlist = []
-    paths = _path_gen(path, recursive)
     cache = {}
+    paths = _path_gen(path, recursive)
     with progress_meter_ctx(description='read', disp=disp) as pm:
         for p in paths:
             pm.increment()
@@ -395,17 +395,33 @@ def cache(path=None, recursive=False, disp=True, overwrite=False):
                 pm.set_message('cache written to %s' % cache_filename)
 
 
-def disp(dicomset, extra_headers=tuple()):
+def _column_name(col):
+    if is_sequence(col):
+        key, val = col[0], col[1]
+        return key
+    return col
+
+def _column_value(col, series):
+    if is_sequence(col):
+        key, val = col[0], col[1]
+        if callable(val):
+            return val(series)
+        else:
+            return series.first.get(val)
+    return series.first.get(col)
+
+def disp(dicomset, extra_columns=tuple()):
     '''Display an iterable of dicoms, removing redundant information
     Args:
     dicomset      -- dicomset
-    extra_headers -- additional headers to display, should be keys in the dicoms
+    extra_columns -- columns to display
 
-    Returns:
-    Returns nothing.
-    Prints a summary of the dicom data
+    Returns: Prints a summary of the dicom data
     '''
-    _headers = ('SeriesNumber', 'SeriesDescription','RepetitionTime') + extra_headers
+    columns = [('#', 'SeriesNumber'), ('Description', 'SeriesDescription')] \
+            + list(extra_columns) \
+            + [('Count', lambda s: s.count),
+               ('ROI', lambda s: '*' if hasattr(s.first, 'meta') and s.first.meta.get('roi') else '')]
     
     if dicomset.count > 0:
         for study in dicomset.studies():
@@ -413,15 +429,13 @@ def disp(dicomset, extra_headers=tuple()):
             print('Patient: %r' % st.PatientName)
             print('StudyID: %r' % st.StudyID)
             print('StudyInstanceUID: %r' % st.StudyInstanceUID)
-            
-            t = PrettyTable(_headers + ('Count','ROI'))
+            if hasattr(st, 'meta'):
+                print('Meta: %r' % st.meta.dict())
+           
+            t = PrettyTable([_column_name(col) for col in columns])
             t.align = 'l'
             for series in study.series():
-                se = series.first
-                has_rois = hasattr(se, 'meta') and se.meta.get('roi')
-                row = [se.get(h) for h in _headers]
-                row += [series.count, '*' if has_rois else '']
-                t.add_row(row)
+                t.add_row([_column_value(col, series) for col in columns])
             print('%s\n' % t)
     else:
         print('Dicom list is empty')

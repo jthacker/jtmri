@@ -1,8 +1,7 @@
 import numpy as np 
 import pylab as plt 
-import collections
 from fuzzywuzzy import fuzz
-import os, sys, logging, csv, re, itertools, collections, copy
+import os, sys, logging, csv, re, itertools, collections, copy, types
 
 
 log = logging.getLogger('jtmri.utils')
@@ -211,3 +210,14 @@ def filter_error(func, catch=(RuntimeError,), retval=False):
             return retval
         return res
     return _filter_error
+
+
+def let(*args, **kwargs):
+    '''bind a value in the arguments and pass it to function'''
+    func = kwargs.pop('func')
+    return func(*args, **kwargs)
+
+
+def is_sequence(x):
+    '''Returns true for all iterables that are not Strings'''
+    return isinstance(x, collections.Iterable) and not isinstance(x, types.StringTypes)

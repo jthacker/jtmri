@@ -77,7 +77,7 @@ class Series(object):
             else:
                 seq_meta = self.sequence.create_metadata(dcm, study_dcms)
                 self.seq_meta_cache[key] = seq_meta
-            _update_meta(meta, seq_meta)
+            _update_meta(seq_meta, meta)
 
     def _add_metadata_rois(self, meta, dcm):
         # TODO: Read all rois from here that match the series number
