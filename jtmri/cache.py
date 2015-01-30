@@ -160,7 +160,7 @@ cache = Cache(DirectoryStore('~/.local/share/jtmri/cache'))
 
 
 @decorator
-def memoize(func, *args, **kwargs):
+def persistent_memoize(func, *args, **kwargs):
     '''Use this decorator to give you function persistent 
     across interpreter sessions. If the same arguments are 
     given to your function then this should result in the 
@@ -176,3 +176,19 @@ def memoize(func, *args, **kwargs):
     else:
         result = cache[key] = func(*args, **kwargs)
     return result
+
+
+def _memoize(func, *args, **kwargs):
+    key = args, frozenset(kw.iteritems()) if kwargs else args
+    cache = func.cache
+    if key in cache:
+        return cache[key]
+    else:
+        cache[key] = result = func(*args, **kwargs)
+        return result
+
+
+def memoize(func):
+    '''Use this decorator to cache return values'''
+    func.cache = {}
+    return decorator(_memoize, func)
