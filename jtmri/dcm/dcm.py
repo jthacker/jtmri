@@ -267,10 +267,14 @@ def _store_cache(dicomset, filename):
         filename -- Name of file to store the dicoms in
     The pixel arrays are dropped from the dicoms to minimize the
     cached file size. They are then lazy loaded after being unpickled.
+    The dicom filename attribute is stored as being relative to the .cache
+    directory. Upon loading, it is restored to an absolute path.
     '''
     dcms = []
+    cache_dir = os.path.dirname(filename)
     for dcm in dicomset:
         d = copy.deepcopy(dcm)
+        d.filename = os.path.relpath(d.filename, cache_dir)
         del d['pixel_array']
         dcms.append(d)
     with open(filename, 'w') as f:
@@ -288,7 +292,9 @@ def _load_cache(filename):
     with open(filename, 'r') as f:
         dcms = pickle.load(f)
 
+    cache_directory = os.path.dirname(filename)
     for dcm in dcms:
+        dcm.filename = os.path.abspath(os.path.join(cache_directory, dcm.filename))
         dcm.pixel_array = Lazy(lambda dcm=dcm: dicom.read_file(dcm.filename).pixel_array)
     return dcms
 
@@ -298,11 +304,12 @@ def _get_cached(cache, path):
     if path in cache:
         return cache[path]
     dirname = os.path.dirname(path)
-    cache_file = os.path.join(dirname, CACHE_FILE_NAME)
-    if os.path.exists(cache_file):
-        for dcm in _load_cache(cache_file):
+    cache_filename = os.path.join(dirname, CACHE_FILE_NAME)
+    if os.path.exists(cache_filename):
+        for dcm in _load_cache(cache_filename):
+            key = os.path.relpath(dcm.filename, cache_filename)
             cache[dcm.filename] = dcm
-        return cache[os.path.abspath(path)]
+        return cache[path]
 
 
 def read(path=None, disp=True, recursive=False, progress=lambda x:x, use_info=True,
