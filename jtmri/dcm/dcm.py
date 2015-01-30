@@ -360,12 +360,13 @@ def _path_gen_dirs(path, recursive):
                 yield p
 
 
-def cache(path=None, recursive=False, disp=True):
+def cache(path=None, recursive=False, disp=True, overwrite=False):
     '''Generate dicom cache files for each directory
     Args:
         path      -- (default: cwd) path to find dicoms in.
         recursive -- (default: False) Recurse into subdirectories
         disp      -- (default: True) Display the progress of the cache generation
+        overwrite -- (default: False) Overwrite existing cache files
 
     This command will search for directories containing dicom files and
     create a cache file for each directory.
@@ -373,12 +374,18 @@ def cache(path=None, recursive=False, disp=True):
     paths = _path_gen_dirs(path, recursive)
     with progress_meter_ctx(description='cache', disp=disp) as pm:
         for d in paths:
+            pm.increment()
+            cache_filename = os.path.join(d, CACHE_FILE_NAME)
+            if not overwrite and os.path.exists(cache_filename):
+                msg = 'skipping existing cache %s. ' % cache_filename
+                msg += 'run with overwrite=True to refresh the cache'
+                pm.set_message(msg)
+                continue
             dcms = read(d, use_info=False, use_cache=False, disp=False,
                         progress=lambda n: pm.increment())
             if len(dcms) > 0:
-                p = os.path.join(d, CACHE_FILE_NAME)
-                _store_cache(dcms, p)
-                pm.set_message('cache written to %s' % p)
+                _store_cache(dcms, cache_filename)
+                pm.set_message('cache written to %s' % cache_filename)
 
 
 def disp(dicomset, extra_headers=tuple()):
