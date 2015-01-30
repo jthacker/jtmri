@@ -1,9 +1,8 @@
-from collections import Sequence
 from glob import iglob
 import os, os.path
-import yaml, copy
+import yaml, copy, collections
 
-from ..utils import AttributeDict, flatten
+from ..utils import AttributeDict, flatten, Lazy
 from ..roi import load as load_roi 
 
 
@@ -15,7 +14,7 @@ def _register_seq(name, seqclass):
 def _update_meta(meta_new, meta_old):
     '''Updates keys in meta_old with values in meta_new.
     If the key in meta_old is a list, then the values in
-    meta_old for that key are append to meta_old[key].
+    meta_old for that key are appended to meta_old[key].
     '''
     for key,val_new in meta_new.items():
         if key in meta_old:
@@ -57,13 +56,14 @@ class Study(object):
 class Series(object):
     def __init__(self, seriesinfo):
         sid = seriesinfo['id']
-        if isinstance(sid, Sequence):
+        if isinstance(sid, collections.Sequence):
             self.matches = lambda dcm, sid=sid: dcm.SeriesNumber in sid
         else:
             self.matches = lambda dcm, sid=sid: dcm.SeriesNumber == sid
         self.sequence = _sequences.get(seriesinfo['seq'], None)
         self.meta = seriesinfo.get('meta', {})
-   
+        self.seq_meta_cache = {}
+
     def add_metadata(self, meta, dcm, study_dcms):
         _update_meta(self.meta, meta)
         self._add_metadata_seq(meta, dcm, study_dcms) 
@@ -71,7 +71,13 @@ class Series(object):
 
     def _add_metadata_seq(self, meta, dcm, study_dcms):
         if self.sequence is not None:
-            self.sequence.add_metadata(meta, dcm, study_dcms)
+            key = dcm.SeriesInstanceUID
+            if key in self.seq_meta_cache:
+                seq_meta = self.seq_meta_cache[key]
+            else:
+                seq_meta = self.sequence.create_metadata(dcm, study_dcms)
+                self.seq_meta_cache[key] = seq_meta
+            _update_meta(meta, seq_meta)
 
     def _add_metadata_rois(self, meta, dcm):
         # TODO: Read all rois from here that match the series number
@@ -86,7 +92,7 @@ class Series(object):
                     roi_file = os.path.join(dirpath, filename)
                     tag = os.path.relpath(dirpath, rois_dir)
                     tag = '/' if tag == '.' else '/' + tag
-                    rois[tag] = load_roi(roi_file)
+                    rois[tag] = Lazy(lambda: load_roi(roi_file))
                     roi_files[tag] = roi_file
         meta['roi'] = rois
         meta['roi_filename'] = roi_files
@@ -94,7 +100,8 @@ class Series(object):
 
 class GRE(object):
     @staticmethod
-    def add_metadata(meta, dcm, study_dcms):
+    def create_metadata(dcm, study_dcms):
+        meta = AttributeDict({})
         meta.r2star_series = None
         meta.t2star_series = None
         meta.sequence = 'gre'
@@ -119,6 +126,7 @@ class GRE(object):
             r2star = study_dcms.by_series(r2star_series_num)
             if len(r2star) > 0 and 'ImageComments' in r2star.first and r2star.first.ImageComments == 'r2star image':
                 meta.r2star_series = r2star_series_num
+        return meta
 _register_seq('gre', GRE)
 
 

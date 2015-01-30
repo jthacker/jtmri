@@ -8,58 +8,6 @@ import os, sys, logging, csv, re, itertools, collections, copy
 log = logging.getLogger('jtmri.utils')
 
 
-class ProgressMeter(object):
-    '''Displays a CLI progress meter.
-    maxVal is the final value of the parameter being incremented.
-    msg will be displayed while the meter is progressing.'''
-
-    def __init__(self, count, msg='working', width=20):
-        # Progress is in the range [0, count)
-        self._fd = sys.stderr
-        self._progress = 0
-        self._count = float(count)
-        self._msg = msg
-        self._width = width
-        self._finished = False
-        self._errorCount = 0
-        self._display(self._msg)
-
-    def _display(self, msg):
-        self._fd.write('\x1b[2K') # Delete current line
-        if self._count != 0:
-            progress = self._progress / self._count
-        else:
-            progress = 1.0
-        markerWidth = int(progress*self._width)
-        progressStr =  '#' * markerWidth
-        progressStr += ' ' * (self._width - markerWidth)
-        self._fd.write("\r[%s] %5.1f%% -- %s" % (progressStr, 100*progress, msg))
-        self._fd.flush()
-        
-    def _end(self, msg):
-        '''Call this if the task finishes earlier than expected'''
-        self._progress = self._count
-        self._display('%s (errors: %d)\n' % (msg, self._errorCount))
-
-    def increment(self):
-        '''Increment the internal value and update the display'''
-        if self._progress + 1 >= self._count:
-            self._progress = self._count
-        else:
-            self._progress += 1
-        self._display(self._msg) 
-
-    def finish(self, success=True):
-        '''Call this if the task finishes succssefully earlier than expected'''
-        msg = 'finished' if success else 'failed'
-        self._end('(%s) %s' % (msg, self._msg))
-
-    def error(self, msg="Error!"):
-        '''Call this if there is a recoverable error while procressing'''
-        self._errorCount += 1
-        self._display(msg)
-
-
 def unique(seq):
     '''find unique elements in iterable while preserving order'''
     seen = set()
