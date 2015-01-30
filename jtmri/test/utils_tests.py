@@ -38,8 +38,16 @@ def test_attributedict_lazy():
     a.values()
     assert x == [1]
 
+    x = []
+    a = AttributeDict({'a': 1, 'b': Lazy(lazy_field)})
+    items = sorted(list(a.iteritems()), key=lambda v: v[0])
+    assert x == [1]
+    assert len(items) == 2
+    assert items[0] == ('a', 1)
+    assert items[1] == ('b', 1)
 
-def test_attributedict_pickleabl():
+
+def test_attributedict_pickleable():
     import pickle
     a = AttributeDict({'a': 1, 'b': 2})
     s = pickle.dumps(a)

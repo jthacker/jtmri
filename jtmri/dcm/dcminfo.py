@@ -94,7 +94,7 @@ class Series(object):
                     tag = '/' if tag == '.' else '/' + tag
                     rois[tag] = Lazy(lambda: load_roi(roi_file))
                     roi_files[tag] = roi_file
-        meta['roi'] = rois
+        meta['roi'] = AttributeDict(rois)
         meta['roi_filename'] = roi_files
 
 

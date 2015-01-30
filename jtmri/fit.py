@@ -6,7 +6,8 @@ import operator as op
 from scipy.optimize import curve_fit
 
 from .cache import memoize
-from .utils import ProgressMeter, rep
+from .utils import rep
+from .progress_meter import ProgressMeter
 from .np import apply_along_axis
 
 log = logging.getLogger('jtmri.fitting')

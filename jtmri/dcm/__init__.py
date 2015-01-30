@@ -1,1 +1,1 @@
-from .dcm import read
+from .dcm import read, cache
