@@ -5,7 +5,7 @@ import numpy as np
 import copy
 import cPickle as pickle
 
-from itertools import ifilter
+from itertools import ifilter, chain
 from collections import defaultdict, Iterable
 from prettytable import PrettyTable
 
@@ -79,6 +79,10 @@ class DicomSet(object):
         key = lambda d: (d.StudyInstanceUID, d.SeriesNumber, d.InstanceNumber)
         self._dcms.sort(key=key)
 
+        self._cache_series = defaultdict(list)
+        for d in self._dcms:
+            self._cache_series[d.SeriesNumber].append(d)
+
     @property
     def first(self):
         return self[0]
@@ -102,7 +106,7 @@ class DicomSet(object):
         return groupby(self, key=key, outtype=DicomSet)
 
     def by_series(self, *nums):
-        return self.filter(lambda d: d.SeriesNumber in nums)
+        return DicomSet(chain.from_iterable(self._cache_series.get(n) for n in nums))
 
     def by_studyid(self, *studyids):
         return self.filter(lambda d: d.StudyID in studyids)
@@ -300,17 +304,27 @@ def _load_cache(filename):
 
 
 def _get_cached(cache, path):
+    '''get path from the dicom cache, loading cache files as needed
+    Args:
+        cache -- dictionary like cache to check if path is cached there
+        path  -- path to a dicom
+    Returns:
+        return a cached dicom or None if it was unable to find the dicom
+    '''
     path = os.path.abspath(path)
     if path in cache:
         return cache[path]
     dirname = os.path.dirname(path)
     cache_filename = os.path.join(dirname, CACHE_FILE_NAME)
-    if os.path.exists(cache_filename):
+    if cache_filename not in cache and os.path.exists(cache_filename):
         log.debug('loading cache %s' % cache_filename)
+        cache[cache_filename] = True
         for dcm in _load_cache(cache_filename):
             key = os.path.relpath(dcm.filename, cache_filename)
             cache[dcm.filename] = dcm
-        return cache[path]
+        return cache.get(path, None)
+    log.debug('cache not found at {}'.format(cache_filename))
+    return None
 
 
 def read(path=None, disp=True, recursive=False, progress=lambda x:x, use_info=True,
@@ -327,22 +341,22 @@ def read(path=None, disp=True, recursive=False, progress=lambda x:x, use_info=Tr
     '''
     dcmlist = []
     cache = {}
+    path = path or os.path.curdir
     paths = _path_gen(path, recursive)
     with progress_meter_ctx(description='read', disp=disp) as pm:
         for p in paths:
             pm.increment()
-            if isdicom(p):
-                dcm = _get_cached(cache, p) if use_cache else None
-                if dcm is None:
-                    dcm = DicomParser.to_attributedict(dicom.read_file(p))
-                    dcm.filename = os.path.abspath(p)
-                    log.debug('loaded from disk %s' % p)
-                else:
-                    log.debug('loaded from cache %s' % p)
-                dcmlist.append(dcm)
+            dcm = _get_cached(cache, p) if use_cache else None
+            if dcm is None:  # path is not in cache
+                if not isdicom(p):
+                    log.debug('ignoring file %s' % p)
+                    continue
+                dcm = DicomParser.to_attributedict(dicom.read_file(p))
+                dcm.filename = os.path.abspath(p)
+                log.debug('loaded from disk %s' % p)
             else:
-                log.debug('ignoring file %s' % p)
-                continue
+                log.debug('loaded from cache %s' % p)
+            dcmlist.append(dcm)
             progress(len(dcmlist))
 
     dicomset = DicomSet(dcmlist)
