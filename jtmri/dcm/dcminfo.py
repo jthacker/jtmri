@@ -88,12 +88,13 @@ class Series(object):
         rois_dir = os.path.join(os.path.dirname(dcm['filename']), 'rois')
         for dirpath, dirnames, filenames in os.walk(rois_dir):
             for filename in filenames:
-                if filename == 'series_%2d.h5' % dcm.SeriesNumber:
+                if filename == 'series_%02d.h5' % dcm.SeriesNumber:
                     roi_file = os.path.join(dirpath, filename)
                     tag = os.path.relpath(dirpath, rois_dir)
                     tag = '/' if tag == '.' else '/' + tag
                     rois[tag] = Lazy(lambda: load_roi(roi_file))
                     roi_files[tag] = roi_file
+        # ROI is set with an AttributeDict because of they are lazily loaded
         meta['roi'] = AttributeDict(rois)
         meta['roi_filename'] = roi_files
 

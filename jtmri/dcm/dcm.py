@@ -92,6 +92,13 @@ class DicomSet(object):
         '''Access an attribute from all objects in this set'''
         return ListAttrAccessor(self) 
 
+    @property
+    def all_unique(self):
+        '''Access an attribute from all objects, but only return unique values,
+        preserves the order they are passed in.
+        '''
+        return ListAttrAccessor(self, unique=True)
+
     def filter(self, func):
         '''Filter the dicoms in this dataset
         Args:
@@ -106,7 +113,7 @@ class DicomSet(object):
         return groupby(self, key=key, outtype=DicomSet)
 
     def by_series(self, *nums):
-        return DicomSet(chain.from_iterable(self._cache_series.get(n) for n in nums))
+        return DicomSet(chain.from_iterable(self._cache_series.get(n, tuple()) for n in nums))
 
     def by_studyid(self, *studyids):
         return self.filter(lambda d: d.StudyID in studyids)

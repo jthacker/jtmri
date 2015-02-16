@@ -55,6 +55,35 @@ def adjust_limits(ax, xadj=0.1, yadj=0.1):
     ax.set_ylim(ymin - yadj * yrng, ymax + yadj * yrng)
 
 
+def max_limits(axs):
+    '''Find the maximum limits that fit all the provided axes
+    Args:
+    axs -- iterable of axis objects
+
+    Returns: (xlims, ylims)
+    '''
+    xmin, xmax = zip(*(ax.get_xlim() for ax in axs))
+    ymin, ymax = zip(*(ax.get_ylim() for ax in axs))
+    return (min(xmin), max(xmax)), (min(ymin), max(ymax))
+
+
+def set_limits_equal(axs, square=False):
+    '''Set the limits of all axs to be the same.
+    Finds the maximum limits that will fit them all.
+    Args:
+    axs    -- iterable of axes
+    square -- (default: False) Set x and y axes to be the same
+    '''
+    xlim, ylim = max_limits(axs)
+    if square:
+        xmin, xmax = xlim
+        ymin, ymax = ylim
+        amin, amax = min(xmin, ymin), max(xmax, ymax)
+        xlim, ylim = (amin, amax), (amin, amax)
+    for ax in axs:
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+
 def density(arr, samples=1000, plt_kwds=dict(), ax=None):
     if ax is None:
         _,ax = pl.subplots()
@@ -72,3 +101,35 @@ def imshow(img, imshow_args={}, title='', label='', ax=None):
     ax.axis('off')
     cb = pl.colorbar(cax, label=label)
     return ax,cb
+
+
+def mean_difference(x, y, ax=None, scatter_kwargs=None):
+    '''Plots mean-difference (bland-altman) of x - y
+    Args:
+    x               -- iterable
+    y               -- iterable
+    ax              -- (default: new axis) axis object to plot on
+    scatter_kwargs  -- (default: defaults) keyword arguments to scatter
+
+    Returns:
+    axis object
+    '''
+    defaults = {
+        'facecolor': 'none',
+        'edgecolors': 'k'}
+    scatter_kwargs = dict(defaults, **(scatter_kwargs or {}))
+    if ax is None:
+        fig, ax = pl.subplots()
+    sx, sy = ((x + y) / 2.), (x - y)
+    m = np.mean(sy)
+    sd = np.std(sy)
+    
+    ax.scatter(sx, sy, **scatter_kwargs)
+    ax.axhline(m, linestyle='--', color='gray', label='mean'.format(m))
+    ax.axhline(m + 2*sd, linestyle='--', color='r', label='mean +/- 2*std'.format(sd))
+    ax.axhline(m - 2*sd, linestyle='--', color='r')
+    ax.set_xlabel('mean')
+    ax.set_ylabel('diff')
+
+    ax.set_title('Mean-Difference plot\n(mean: {:.3g} std: {:.3g})'.format(m, sd))
+    return ax

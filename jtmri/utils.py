@@ -1,7 +1,9 @@
 import numpy as np 
 import pylab as plt 
+import inspect
 from fuzzywuzzy import fuzz
 import os, sys, logging, csv, re, itertools, collections, copy, types
+from collections import Iterable
 
 
 log = logging.getLogger('jtmri.utils')
@@ -168,17 +170,51 @@ class GenLen(object):
 class ListAttrAccessor(object):
     '''Access the same attribute from each object in a list'''
 
-    def __init__(self, lst):
-        self._obj = lst[0] if len(lst) > 0 else {}
-        self._attrs = []
-        self._attrs = self._obj.keys()
-        self._lst = lst 
+    def __init__(self, item_list, attributes=dir, unique=False):
+        '''Init ListAttrAccessor.
+        Args:
+            item_list  -- list of items that have common attributes
+            attributes -- (default: None) explicit list of attributes, None (all attributes) or a function
+            unique     -- (default: dir) Only return unique values, preservering order
+        The first item is used to get the attributes that are supported unless the attributes
+        option is supplied.
+        Usage:
+        >>> l = ListAttributeAccess([{'a':i, 'b':i**2} for i in range(5)], attributes=lambda o: o.keys())
+        >>> l.a
+        np.array([0, 1, 2, 3, 4, 5])
+        >>> l.b
+        np.array([0, 1, 4, 9, 16, 25])
+
+        Attributes are automatically pulled from the first item in item_list using dir.
+        Attributes starting with and underscore ('_') are ignored.
+        '''
+        self._attributes = []
+        if isinstance(attributes, Iterable):
+            self._attributes = attributes
+        elif len(item_list) > 0:
+            self._attributes = attributes(item_list[0])
+        # Filter out private attributes
+        self._attributes = filter(lambda s: not s.startswith('_'), self._attributes)
+        self._unique = unique
+        self._item_list = item_list
 
     def __dir__(self):
-        return self.__dict__.keys() + self._attrs
+        return self.__dict__.keys() + self._attributes
 
     def __getattr__(self, attr):
-        return np.array([d[attr] if attr in d else None for d in self._lst])
+        vals = []
+        for obj in self._item_list:
+            try:
+                val = getattr(obj, attr)
+            except AttributeError:
+                try:
+                    val = obj[attr]
+                except (TypeError, KeyError):
+                    val = None
+            vals.append(val)
+        if self._unique:
+            vals = unique(vals)
+        return np.array(vals)
 
 
 def similar(s1, s2, threshold=90):
