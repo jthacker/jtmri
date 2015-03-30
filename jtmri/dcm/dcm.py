@@ -335,25 +335,30 @@ def _get_cached(cache, path):
 
 
 def read(path=None, disp=True, recursive=False, progress=lambda x:x, use_info=True,
-         use_cache=True):
+         use_cache=True, make_cache=False):
     '''Read dicom files from path and print a summary
     Args:
-        path      -- (default: cwd) glob like path of dicom files
-        disp      -- (default: True) Print a summary
-        recursive -- (default: False) Recurse into subdirectories
-        progress  -- (default: None) One arg callback function (# dicoms read)
-        use_info  -- (default: True) Load info from dicom info files (info.yaml)
-        use_cache -- (default: True) Use cached files to quickly load dicoms
+        path       -- (default: cwd) glob like path of dicom files
+        disp       -- (default: True) Print a summary
+        recursive  -- (default: False) Recurse into subdirectories
+        progress   -- (default: None) One arg callback function (# dicoms read)
+        use_info   -- (default: True) Load info from dicom info files (info.yaml)
+        use_cache  -- (default: True) Use cached files to quickly load dicoms
+        make_cache -- (default: False) Create a cache of dicoms if it doesn't exist
     Returns: A list of dicom objects. Prints a summary of the dicom objects if disp is True
     '''
     dcmlist = []
-    cache = {}
+    dcm_cache = {}
     path = path or os.path.curdir
     paths = _path_gen(path, recursive)
+
+    if make_cache:
+        cache(path=path, recursive=recursive, disp=disp, progress=progress)
+
     with progress_meter_ctx(description='read', disp=disp) as pm:
         for p in paths:
             pm.increment()
-            dcm = _get_cached(cache, p) if use_cache else None
+            dcm = _get_cached(dcm_cache, p) if use_cache else None
             if dcm is None:  # path is not in cache
                 if not isdicom(p):
                     log.debug('ignoring file %s' % p)
@@ -388,19 +393,25 @@ def _path_gen_dirs(path, recursive):
                 yield p
 
 
-def cache(path=None, recursive=False, disp=True, overwrite=False):
+def cache(path=None, recursive=False, disp=True, overwrite=False, progress=lambda x:x):
     '''Generate dicom cache files for each directory
     Args:
         path      -- (default: cwd) path to find dicoms in.
         recursive -- (default: False) Recurse into subdirectories
         disp      -- (default: True) Display the progress of the cache generation
         overwrite -- (default: False) Overwrite existing cache files
+        progress  -- (default: None) Callback for the progress, returns #dicoms read
 
     This command will search for directories containing dicom files and
     create a cache file for each directory.
     '''
     paths = _path_gen_dirs(path, recursive)
     with progress_meter_ctx(description='cache', disp=disp) as pm:
+        def _progress(n):
+            pm.increment(n)
+            progress(n)
+
+        cnt = 0
         for d in paths:
             pm.increment()
             cache_filename = os.path.join(d, CACHE_FILE_NAME)
@@ -410,7 +421,7 @@ def cache(path=None, recursive=False, disp=True, overwrite=False):
                 pm.set_message(msg)
                 continue
             dcms = read(d, use_info=False, use_cache=False, disp=False,
-                        progress=lambda n: pm.increment())
+                        progress=_progress)
             if len(dcms) > 0:
                 _store_cache(dcms, cache_filename)
                 pm.set_message('cache written to %s' % cache_filename)
