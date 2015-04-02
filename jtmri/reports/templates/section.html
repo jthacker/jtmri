@@ -1,0 +1,12 @@
+<div class="section">
+    <div class="section-title">{{ section.title }}</div>
+    <hr />
+    <div class="section-description">
+        <pre>{{ section.description }}</pre>
+    </div>
+    <div class="section-body">
+    {% set template = section.template %}
+    {% set obj = section.obj %}
+    {% include template %}
+    </div>
+</div>

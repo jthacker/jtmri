@@ -3,6 +3,7 @@ from collections import namedtuple
 import numpy as np
 import pylab as plt
 import operator as op
+import skimage.morphology
 from scipy.optimize import curve_fit
 
 from .cache import memoize
@@ -176,6 +177,19 @@ def fit_r2star_fast(t, arr, axis=-1):
     if np.ma.isMaskedArray(arr):
         r2star = np.ma.array(r2star, mask=np.ma.getmaskarray(arr).all(axis=-1))
     return r2star
+
+
+def fit_r2star_with_threshold(t, data, min_threshold=20):
+    '''Fit an R2* map using a fast fitting method and thresholded GRE images.
+    Assumes that the last dimension holds the echos'''
+    selem = np.ones((2,2))
+
+    mask = data < min_threshold
+    for idx in np.ndindex(*mask.shape[2:]):
+        slc = (slice(None,None), slice(None,None)) + idx
+        mask[slc] = skimage.morphology.binary_dilation(mask[slc], selem=selem)
+    mask = np.tile(mask.any(axis=-1)[...,np.newaxis], mask.shape[-1])
+    return fit_r2star_fast(t, np.ma.array(data, mask=mask))
 
 
 fit_r2 = Fitter(lambda te, so, r2: so * np.exp(-1 * r2 * te), (1,1))

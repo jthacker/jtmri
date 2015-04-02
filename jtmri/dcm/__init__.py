@@ -1,1 +1,1 @@
-from .dcm import read, cache
+from .dcm import read, cache, DicomSet

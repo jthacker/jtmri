@@ -3,6 +3,8 @@ import numpy as np
 import h5py
 from collections import namedtuple
 
+from .utils import unique
+
 #TODO: Duplicate code from arrview
 
 class SliceTuple(tuple):
@@ -157,7 +159,7 @@ class ROISet(object):
     @property
     def names(self):
         '''Returns a unique set of names from the rois in this object'''
-        return set(r.name for r in self.rois)
+        return unique(r.name for r in self.rois)
 
     @property
     def count(self):

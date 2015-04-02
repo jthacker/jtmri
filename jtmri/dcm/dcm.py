@@ -11,7 +11,8 @@ from prettytable import PrettyTable
 
 from .siemens import SiemensProtocol
 from ..progress_meter import progress_meter_ctx
-from ..utils import unique, AttributeDict, ListAttrAccessor, Lazy, is_sequence
+from ..utils import (unique, AttributeDict, ListAttrAccessor, Lazy,
+                     is_sequence)
 from . import dcminfo
 
 

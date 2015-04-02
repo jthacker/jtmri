@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+    <body>
+        <style type='text/css'>
+            {% include 'static/style.css' %}
+        </style>
+        <script>
+        </script>
+        <div class='report-title'>
+            {{ report.title }}
+            <hr />
+        </div>
+        <div class='report-description'>
+            <pre>{{ report.description }}</pre>
+        </div>
+
+        <div id="content">
+        {% for section in report.sections %}
+            {% include 'section.html' %}
+        {% endfor %}
+        </div>
+    </body>
+</html>

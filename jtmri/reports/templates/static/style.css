@@ -1,0 +1,74 @@
+@page {
+    margin: 0.5cm;
+}
+
+body {
+    /*font-family: verdana, arial, sans-serif;*/
+}
+
+hr {
+    margin: 0;
+    margin-bottom: 0.1em;
+}
+
+.report-title {
+    font-size: 4em;
+    text-align: center; 
+}
+
+.section {
+    margin-top: 2.5em;
+}
+
+.section-body {
+    padding: 0 1em;
+}
+
+table.results {
+    width: 100%;
+    font-family: 'monospace';
+    font-size: 0.8em;
+    border-width: 1px;
+    border-color: black;
+    border-collapse: collapse;
+    margin-bottom: 2em;
+}
+
+table.results th {
+    padding: 4px;
+    background-color: #dedede;
+    border-width: 1px;
+    border-style: solid;
+    border-color: #666;
+}
+
+table.results td {
+    padding: 4px;
+    border-width: 1px;
+    border-style: solid;
+    border-color: #666;
+}
+
+.section-title {
+    font-size: 2em;
+}
+
+.even {
+    background: #EEE;
+}
+
+.stage {
+    display: inline-block;
+}
+
+.report-image {
+    width: 160px;
+}
+
+.colorbar {
+    height: 220px;
+}
+
+.plot-img {
+    width: 300px;
+}

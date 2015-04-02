@@ -1,0 +1,19 @@
+<table class='results'>
+<thead>
+    <tr>
+        {% for header in obj.headers %}
+        <th> {{ header }} </th>
+        {% endfor %}
+    </tr>
+</thead>
+<tbody>
+    {% for row in obj.rows %}
+    <tr class="{{ loop.cycle('odd','even') }}">
+        {% for val in row %}
+        <td> {{ val }} </td>
+        {% endfor %}
+    </tr>
+    {% endfor %}
+</tbody>
+</table>
+

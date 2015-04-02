@@ -148,6 +148,9 @@ def flatten_axes(a, axis, keepdims=False):
     True
     '''
     axes = np.array(sorted(jtmri.utils.as_iterable(axis)))
+    bad_axes = list(axes[axes > a.ndim])
+    assert not bad_axes, 'Axes {!r} are bigger then a.ndim={!r}'.format(bad_axes, a.ndim)
+
     out_shape = np.array(a.shape)
     out_shape[axes[0]] = -1
     if keepdims:
@@ -183,3 +186,13 @@ def apply_to_axes(func, a, axis, keepdims=False):
     '''
     axes = np.array(sorted(jtmri.utils.as_iterable(axis)))
     return func(flatten_axes(a, axis, keepdims), axis=axes[0])
+
+
+def iterate_axis(a, axis):
+    '''Generates arrays by iterating over the specified axis.
+    If this axis does not exist, then nothing is generated
+    '''
+    if axis > a.ndim:
+        yield
+    for arr in np.rollaxis(a, axis):
+        yield arr

@@ -59,8 +59,16 @@ def extract(arr, threshold=0, padding=0, return_idx=False):
 
 
 def flatten(iterable):
-    '''Flattens the iterable by one level'''
-    return (x for sublst in iterable for x in sublst)
+    '''Flattens the iterable by one level.
+    If there are non-iterable items in the zero-th level,
+    they are returned unaltered.
+    '''
+    for sublst in iterable:
+        try:
+            for x in sublst:
+                yield x
+        except TypeError:
+            yield sublst
 
 
 class Lazy(object):
