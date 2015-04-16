@@ -1,6 +1,7 @@
 from .builder import Images, Report, Section, Table
 from ..np import flatten_axes, iterate_axis
 from ..fit import fit_r2star_with_threshold
+import numpy as np
 
 
 class ROITable(Table):
@@ -18,7 +19,11 @@ class ROITable(Table):
             data     -- ndarray
             roi_dict -- Dictionary of ROIs
         '''
-        fmt = '{:4.2f}'.format
+        def fmt(val):
+            if np.ma.is_masked(val):
+                return 'nan'
+            else:
+                return '{:4.2f}'.format(val)
         for observer, roi_set in roi_dict.iteritems():
             for roi_name in roi_set.names:
                 roi = roi_set.by_name(roi_name)
