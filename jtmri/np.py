@@ -188,7 +188,7 @@ def apply_to_axes(func, a, axis, keepdims=False):
     return func(flatten_axes(a, axis, keepdims), axis=axes[0])
 
 
-def iterate_axis(a, axis):
+def iter_axis(a, axis):
     '''Generates arrays by iterating over the specified axis.
     If this axis does not exist, then nothing is generated
     '''
