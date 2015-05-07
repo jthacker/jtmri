@@ -198,18 +198,21 @@ def iter_axis(a, axis):
         yield arr
 
 
-def mosaic(a, aspect=16/9.):
+def mosaic(a, aspect=16/9., fill=np.nan):
     '''Turn 3-D array a into a mosaic
     Args:
     a   -- 3-D ndarray
     Returns a 2-D ndarray
     '''
     _, _, N = a.shape
-    nc = int(np.sqrt(N / aspect))
-    nr = int(np.ceil(N / float(nc)))
+    if N == 1:
+        nc, nr = 1, 1
+    else:
+        nc = int(np.sqrt(N / aspect))
+        nr = int(np.ceil(N / float(nc)))
     pad = (nr * nc) - N
     if pad > 0:
-        pad_im = np.nan * np.ones(a.shape[:2] + (pad,))
+        pad_im = fill * np.ones(a.shape[:2] + (pad,))
         a = np.concatenate((a, pad_im), 2)
     long_arr = np.vstack(a.swapaxes(0, 2))
     return np.hstack(np.array_split(long_arr, nr))
