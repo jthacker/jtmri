@@ -3,6 +3,7 @@ from glob import iglob
 import os, dicom, logging
 import numpy as np
 import copy
+import shutil
 import cPickle as pickle
 
 from itertools import ifilter, chain
@@ -135,6 +136,10 @@ class DicomSet(object):
 
     def data(self, groupby=tuple()):
         return data(self, field='pixel_array', groupby=groupby)
+
+    def cp(self, dest):
+        '''Copy dicom files to dest directory'''
+        return dcm_copy(self, dest)
    
     @property
     def count(self):
@@ -497,3 +502,18 @@ def view(dicoms, groupby=tuple(), roi_filename=None, roi_tag='/'):
         roi_filename = os.path.dirname(df.filename)
     return arrview.view(arr, roi_filename=roi_filename)
 
+
+def dcm_copy(dicoms, dest):
+    '''Copy the dicoms from their current directory to the dest directory.
+    File basenames are unchanged.
+    Args:
+    dicoms -- An interable of dicoms
+    dest   -- Path to copy dicoms to
+
+    Returns: Nothing
+    '''
+    assert os.path.isdir(dest), 'dest must be a directory that exists'
+    for dcm in dicoms:
+        filename = dcm.filename
+        base = os.path.basename(filename)
+        shutil.copy(filename, os.path.join(dest, base))
