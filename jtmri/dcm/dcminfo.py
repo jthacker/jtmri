@@ -123,7 +123,7 @@ class ROIReader(object):
                     roi_file = os.path.join(dirpath, filename)
                     tag = os.path.relpath(dirpath, rois_dir)
                     tag = '/' if tag == '.' else '/' + tag
-                    rois[tag] = Lazy(lambda: load_roi(roi_file))
+                    rois[tag] = Lazy(lambda roi_file=roi_file, tag=tag: load_roi(roi_file, tag))
                     roi_files[tag] = roi_file
         return rois, roi_files
 
