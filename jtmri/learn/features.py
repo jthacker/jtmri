@@ -34,7 +34,7 @@ def plot_spatial_context_features_distributions(features, bins=25):
         ax.set_title(name)
     pl.tight_layout()
 
-def plot_spatial_context_features(origin, features, ax=None, show_arrows=True):
+def plot_spatial_context_features(origin, features, scale=(1, 1), ax=None, show_arrows=True):
     """Given a origin and an array of features, plot them as rectangles and arrows."""
     from matplotlib.patches import Rectangle, Arrow
     if ax is None:
@@ -43,7 +43,12 @@ def plot_spatial_context_features(origin, features, ax=None, show_arrows=True):
     ox, oy = origin
     ymin, ymax = 0, 0
     xmin, xmax = 0, 0
-    for x, y, h, w in features:
+    sx, sy = scale
+    for x, y, w, h in features:
+        x /= sx
+        y /= sy
+        w /= sx
+        h /= sy
         ax.add_patch(Rectangle((ox + x - w/2, oy + y - h/2), w, h, facecolor=(1,0,0,0.1)))
         if show_arrows:
             ax.add_patch(Arrow(ox, oy, x, y))
@@ -80,7 +85,7 @@ def integral_image_mean(ii, r0, c0, r1, c1):
     return integral_image_sum(ii, r0, c0, r1, c1) / N
     
 
-def spatial_context_features_response(image, feature_params, scale):
+def spatial_context_features_response(image, feature_params, scale, mask=None):
     """Compute the response of each feature for pixel in the image
     Args:
         image          -- ndarray for computing response from.
@@ -89,6 +94,7 @@ def spatial_context_features_response(image, feature_params, scale):
         feature_params -- ndarray of shape [n_features, 4] (feature units should be in millimeters)
         scale          -- a 2-tuple (sx, sy) that gives the scale
                           from millimeters to pixels (e.g. 10 mm / pixel)
+        mask           -- only compute the response for the pixels in this mask
         
     Returns: ndarray of feature responses, shape is [image.size]
     
@@ -108,11 +114,13 @@ def spatial_context_features_response(image, feature_params, scale):
     def cleanse(x, xmax):
         return np.clip(x.ravel(), 0, xmax).astype(int)
 
-    r, c = [x.ravel()[:,np.newaxis] for x in np.mgrid[:N, :M]]
+    rr, cc = np.mgrid[:N, :M]
+    if mask is not None:
+        rr, cc = rr[mask], cc[mask]
+    r, c = [x.ravel()[:,np.newaxis] for x in (rr, cc)]
     dx, dy, w, h = feature_params.T
     R0 = cleanse(r + (dy - h/2.) * sy, N - 1)
     R1 = cleanse(r + (dy + h/2.) * sy, N - 1)
     C0 = cleanse(c + (dx - w/2.) * sx, M - 1)
     C1 = cleanse(c + (dx + w/2.) * sx, M - 1)
-    mean = integral_image_mean(ii, R0, C0, R1, C1)
-    return mean.reshape(N, M, n_features)
+    return integral_image_mean(ii, R0, C0, R1, C1).reshape(-1, n_features)
