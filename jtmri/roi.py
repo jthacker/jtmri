@@ -126,10 +126,11 @@ def create_mask(shape, slc, poly, collapse=False):
 
 
 class ROI(object):
-    def __init__(self, name, poly, slc):
+    def __init__(self, name, poly, slc, tag=None):
         self.name = name
         self.poly = poly
         self.slc = slc
+        self.tag = tag
 
     def to_mask(self, shape, collapse=False):
         return create_mask(shape, self.slc, self.poly, collapse)
@@ -174,7 +175,7 @@ class ROISet(object):
         return iter(self.rois)
 
 
-def load(filename):
+def load(filename, tag=None):
     rois = []
     with h5py.File(filename, 'r') as f:
         for roigrp in f['/rois'].itervalues():
@@ -183,7 +184,8 @@ def load(filename):
             rois.append(
                 ROI(name=roigrp.attrs['name'],
                     poly=roigrp['poly'].value,
-                    slc=SliceTuple.from_arrayslice(arrslc, viewdims)))
+                    slc=SliceTuple.from_arrayslice(arrslc, viewdims),
+                    tag=tag))
     return ROISet(rois)
 
 
