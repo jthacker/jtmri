@@ -2,28 +2,76 @@ from __future__ import division
 import numpy as np
 from scipy import stats
 import matplotlib.pyplot as pl
+import itertools
+from collections import namedtuple, Iterable
 
-def multi_bar(xlabels, data, yerr, grouplabels, groupcolors, ax=None, padding=0.15):
+import jtmri.np
+
+tableau20 = [(31, 119, 180), (174, 199, 232), (255, 127, 14), (255, 187, 120),  
+             (44, 160, 44), (152, 223, 138), (214, 39, 40), (255, 152, 150),  
+             (148, 103, 189), (197, 176, 213), (140, 86, 75), (196, 156, 148),  
+             (227, 119, 194), (247, 182, 210), (127, 127, 127), (199, 199, 199),  
+             (188, 189, 34), (219, 219, 141), (23, 190, 207), (158, 218, 229)]  
+  
+# Scale the RGB values to the [0, 1] range, which is the format matplotlib accepts.  
+for i in range(len(tableau20)):  
+    r, g, b = tableau20[i]  
+    tableau20[i] = (r / 255., g / 255., b / 255.)
+
+
+BBox = namedtuple('BBox', ['x', 'y', 'width', 'height'])
+
+def multi_bar(xlabels, data, yerr=None,
+              group_labels=None, group_colors=None, axs=None,
+              x_start=0,
+              padding=0.15):
     Ngroups = len(data)
     assert Ngroups > 0
     assert 0 <= padding <= 1.0
     Nx = len(data[0])
+
+    if yerr is None:
+        yerr = [[0] * Nx] * Ngroups
+    else:
+        assert len(yerr) == Ngroups
+
+    if group_labels is None:
+        group_labels = map(str, range(Nx))
+    else:
+        assert len(group_labels) == Ngroups
+
+    if group_colors is None:
+        colors = itertools.cycle(tableau20)
+        group_colors = [colors.next() for _ in range(Ngroups)]
+    else:
+        assert len(group_colors) == Ngroups
     
     width = (1 - padding) / Ngroups
     
-    if ax is None:
-        _, ax = pl.subplots()
+    if axs is None:
+        _, axs = pl.subplots()
+
+    if not isinstance(axs, Iterable):
+        axs = [axs] * Ngroups
+    else:
+        assert len(axs) == Ngroups
     
-    ind = np.arange(Nx)
+    ind = x_start + np.arange(Nx)
+    bboxs = {}
     rects = []
-    for i in range(Ngroups):
-        rects.append(ax.bar(ind+(width*i), data[i], width, 
-            color=groupcolors[i], yerr=yerr[i], ecolor='black'))
-    ax.set_xticks(ind+((1-padding)/2))
-    ax.set_xticklabels(xlabels)
-    ax.set_xlim([-padding, Nx])
-    ax.legend([r[0] for r in rects], grouplabels)
-    return ax,rects
+    for i, ax in zip(range(Ngroups), axs):
+        x, y = ind+(width*i), np.array(data[i])
+        rects.append(ax.bar(x, y, width, 
+                            color=group_colors[i],
+                            yerr=yerr[i],
+                            ecolor='black'))
+        bboxs[group_labels[i]] = [BBox(x[j], 0, width, y[j] + yerr[i][j])
+                                  for j in range(Nx)]
+        ax.set_xticks(ind + ((1 - padding) / 2))
+        ax.set_xticklabels(xlabels)
+        ax.set_xlim([-padding, Nx])
+    legend = ax.legend([r[0] for r in rects], group_labels)
+    return axs, legend, rects, bboxs
 
 
 def line(y_intercept, slope, xlimits=None, ax=None, plot_kwds={}):
@@ -97,10 +145,41 @@ def imshow(img, imshow_args={}, title='', label='', ax=None):
     '''Wrapper around matplotlib.imshow but with better defaults'''
     if ax is None:
         fig,ax = pl.subplots()
+    if img.ndim > 2:
+        img = jtmri.np.mosaic(img)
     cax = ax.imshow(img, **imshow_args)
     ax.axis('off')
     cb = pl.colorbar(cax, label=label)
     return ax,cb
+
+
+def label_bars(bbox0, bbox1, text, y_offset=None, y_text_offset=None, ax=None):
+    '''Place a label between two bars.
+    Useful for indicating significant differences'''
+    if ax is None:
+        ax = pl.gca()
+
+    props = {
+        'connectionstyle': 'bar',
+        'arrowstyle': '-',
+        'lw': 1
+    }
+
+    y = max(bbox0.height, bbox1.height)
+
+    y_lim = ax.get_ylim()
+    if y_offset is None:
+        y_offset = 0.05 * (y_lim[1] - y_lim[0])
+
+    if y_text_offset is None:
+        y_text_offset = 0.1 * (y_lim[1] - y_lim[0])
+
+    xy0 = (bbox0.x + (bbox0.width / 2.), y + y_offset)
+    xy1 = (bbox1.x + (bbox1.width / 2.), y + y_offset)
+    ax.annotate('', xy=xy0, xytext=xy1, zorder=10, arrowprops=props)
+    ax.annotate(text, xy=((xy0[0] + xy1[0]) / 2., xy0[1] + y_text_offset),
+                zorder=10,
+                ha='center')
 
 
 def mean_difference(x, y, ax=None, scatter_kwargs=None):
