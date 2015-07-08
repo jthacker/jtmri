@@ -86,7 +86,7 @@ def integral_image_mean(ii, r0, c0, r1, c1):
     
 
 def spatial_context_features_response(image, feature_params, scale, mask=None):
-    """Compute the response of each feature for pixel in the image
+    """Compute the response of each feature for every pixel in the image
     Args:
         image          -- ndarray for computing response from.
                           if ndim is == 3, then the third dimension is treated as
@@ -96,7 +96,7 @@ def spatial_context_features_response(image, feature_params, scale, mask=None):
                           from millimeters to pixels (e.g. 10 mm / pixel)
         mask           -- only compute the response for the pixels in this mask
         
-    Returns: ndarray of feature responses, shape is [image.size]
+    Returns: ndarray of feature responses, shape is [image.size, len(feature_params)]
     
     The response is computed as sum of the mean of each channel in the image.
     """

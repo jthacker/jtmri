@@ -1,5 +1,6 @@
 import skimage.exposure
 from .features import spatial_context_features_response
+from jtmri.phantom import phantom
 from skimage.morphology import binary_dilation, disk
 import numpy as np
 from numpy.random import normal
@@ -28,7 +29,7 @@ norm = lambda loc=0.,scale=1.,size=1: loc if scale==0 else normal(loc, scale, si
 
 
 def shepp_logan(n=256, mask_num=6):
-    im, masks = jtmri.phantom.phantom(n, ret_masks=True)
+    im, masks = phantom(n, ret_masks=True)
     return im, masks[mask_num]
 
 
