@@ -199,11 +199,12 @@ def iter_axis(a, axis):
 
 
 def mosaic(a, aspect=16/9., fill=np.nan):
-    '''Turn 3-D array a into a mosaic
+    '''Turn a N-D array a into a mosaic
     Args:
-    a   -- 3-D ndarray
+    a   -- N-D ndarray
     Returns a 2-D ndarray
     '''
+    a = a.reshape((a.shape[0], a.shape[1], -1))
     _, _, N = a.shape
     if N == 1:
         nc, nr = 1, 1
