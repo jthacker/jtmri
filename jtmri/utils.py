@@ -36,7 +36,9 @@ def extract(arr, threshold=0, padding=0, return_idx=False):
     Args:
     arr        -- Array to extract values from
     threshold  -- Values <= threshold are considered background
-    padding    -- When extracting, adding padding around the final region
+    padding    -- When extracting, adding padding around the final region.
+                  Padding can be an array of len arr.ndim, where each value
+                  indicates the amount of padding for that dimension
     return_idx -- (default False) When True, returns a tuple of
                   the indicies used to slice the array and the sliced array.
                   Otherwise, only the sliced array is returned.
@@ -46,12 +48,19 @@ def extract(arr, threshold=0, padding=0, return_idx=False):
     When return_idx is True, than a tuple of the indicies used for sliceing
     and the sliced array are returned.
     '''
-    def slicer(idxs, dim_len):
-        min = np.clip(idxs.min() - padding, 0, dim_len)
-        max = np.clip(idxs.max() + 1 + padding, 0, dim_len)
+    if isinstance(padding, Iterable):
+        assert len(padding) == arr.ndim, 'padding must be same length as arr.ndim'
+    else:
+        padding = [padding] * arr.ndim
+
+    def slicer(idxs, dim_len, pad):
+        min = np.clip(idxs.min() - pad, 0, dim_len)
+        max = np.clip(idxs.max() + 1 + pad, 0, dim_len)
         return slice(min, max)
 
-    indices = [slicer(a, dim_len) for a,dim_len in zip((arr > threshold).nonzero(), arr.shape)]
+    indices = [slicer(a, dim_len, pad)
+               for a, dim_len, pad
+               in zip((arr > threshold).nonzero(), arr.shape, padding)]
     if return_idx:
         return arr[indices], indices
     else:
