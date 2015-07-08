@@ -112,6 +112,24 @@ class GRE(object):
 _register_seq('gre', GRE)
 
 
+class ADC(object):
+    @staticmethod
+    def create_metadata(dcm, studydcms):
+        meta = AttributeDict({})
+        meta.sequence = 'adc'
+        return meta
+_register_seq('adc', ADC)
+
+
+class SE(object):
+    @staticmethod
+    def create_metadata(dcm, studydcms):
+        meta = AttributeDict({})
+        meta.sequence = 'se'
+        return meta
+_register_seq('se', SE)
+
+
 class ROIReader(object):
     @memoize
     def __call__(self, rois_dir, series_number):
@@ -126,7 +144,6 @@ class ROIReader(object):
                     rois[tag] = Lazy(lambda roi_file=roi_file, tag=tag: load_roi(roi_file, tag))
                     roi_files[tag] = roi_file
         return rois, roi_files
-
 
 
 def _convert(raw_infos):
