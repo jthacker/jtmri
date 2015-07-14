@@ -17,6 +17,17 @@ class Report(object):
     def add_section(self, section):
         self.sections.append(section)
 
+    def add_images(self, title, description, data):
+        '''Add an image for every image in the axes after the first two.
+        For example, an ndarray with dims (64,64,5,4) would add 20 images,
+        5 images for the third dimension times 4 images for the fourth dimension.
+        '''
+        images = Images(title, description, [data.min(), data.max()])
+        arrs = flatten_axes(data, range(2, data.ndim))
+        for arr in iter_axis(arrs, 2):
+            images.add_image(arr)
+        self.add_section(images)
+
     def to_html(self):
         cur_dir = os.path.dirname(__file__)
         loader = jinja2.FileSystemLoader([os.path.join(cur_dir, 'templates')])

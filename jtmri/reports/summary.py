@@ -53,13 +53,16 @@ class DicomStudySummaryReport(Report):
     def __init__(self, dcms):
         self._dcms = dcms
         s = dcms.first
-        title = s.PatientName
-        description = 'Study Description: {}\n'\
-                      'Study Date: {}\n' \
-                      'Study Time: {}\n'.format(
-                            s.StudyDescription,
-                            s.StudyDate,
-                            s.StudyTime)
+        title = 'ID: {}'.format(s.PatientID)
+        description = \
+            'PatientName: {}\n' \
+            'Study Description: {}\n' \
+            'Study Date: {}\n' \
+            'Study Time: {}\n'.format(
+                s.PatientName,
+                s.StudyDescription,
+                s.StudyDate,
+                s.StudyTime)
         super(DicomStudySummaryReport, self).__init__(title, description)
         self._roi_table = ROITable('ROI Summary')
         self.add_section(self._roi_table)
