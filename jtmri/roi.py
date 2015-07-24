@@ -147,7 +147,7 @@ class ROISet(object):
     def to_mask(self, shape, collapse=False):
         '''Create a mask from the ROIs'''
         masks = map(lambda a: a.to_mask(shape, collapse), self)
-        return reduce(np.logical_or, masks) 
+        return reduce(np.logical_or, masks, np.zeros(shape, dtype=bool)) 
 
     def to_masked(self, array, collapse=False):
         '''Returns a numpy masked array'''
