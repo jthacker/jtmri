@@ -61,8 +61,11 @@ class CombineForm722Report(Report):
         for side, table in [('r', self._rtable), ('l', self._ltable)]:
             for region, description, fmt in _adc_rows:
                 dcms = self._dcms.by_series(series_adc)
-                data = dcms.data('SliceLocation')
-                add_roi(table, dcms.first.meta.roi, side, region, data, description)
+                if dcms.count == 0:
+                    table.add_row((description, ''))
+                else:
+                    data = dcms.data('SliceLocation')
+                    add_roi(table, dcms.first.meta.roi, side, region, data, description)
         
             for series_number, rows in [(series_r2s_pre, _r2s_pre_rows),
                                         (series_r2s_post, _r2s_post_rows)]:
