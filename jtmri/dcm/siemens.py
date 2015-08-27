@@ -185,10 +185,14 @@ class SiemensProtocol(object):
     def from_dicom(dcm):
         seriesData = {}
         if SiemensProtocol.has_protocol(dcm):
-            seriesData = _parse_csa_header(dcm[SiemensProtocol._dicom_tag])
-            protocolRaw = seriesData['MrPhoenixProtocol']
-            protocol = SiemensProtocol(protocolRaw).asDict()
-            seriesData['MrPhoenixProtocol'] = protocol
+            try:
+                tag = dcm[SiemensProtocol._dicom_tag]
+                seriesData = _parse_csa_header(tag)
+                protocolRaw = seriesData['MrPhoenixProtocol']
+                protocol = SiemensProtocol(protocolRaw).asDict()
+                seriesData['MrPhoenixProtocol'] = protocol
+            except AssertionError:
+                log.error('Failed to parse Siemens Protocol from dicom tag %r' % (tag,))
         return seriesData
 
     def __init__(self, protocolStr):
