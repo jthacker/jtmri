@@ -3,7 +3,7 @@ import numpy as np
 import h5py
 from collections import namedtuple
 
-from .utils import unique
+from .utils import unique, rep
 
 #TODO: Duplicate code from arrview
 
@@ -134,6 +134,9 @@ class ROI(object):
 
     def to_mask(self, shape, collapse=False):
         return create_mask(shape, self.slc, self.poly, collapse)
+
+    def __repr__(self):
+        return 'ROI(name=%r, slc=%r, tag=%r, ...)' % (self.name, self.slc, self.tag)
 
 
 class ROISet(object):
