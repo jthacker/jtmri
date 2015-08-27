@@ -137,9 +137,9 @@ class AttributeDict(collections.MutableMapping):
 
     def dict(self):
         return copy.deepcopy(self._store)
-   
-    def __str__(self):
-        return 'AttributeDict(' + str(self._store) + ')'
+  
+    def __repr__(self):
+        return 'AttributeDict(' + repr(self._store) + ')'
 
 
 class DefaultAttributeDict(AttributeDict):
