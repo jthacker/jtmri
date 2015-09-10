@@ -215,5 +215,5 @@ def mosaic(a, aspect=16/9., fill=np.nan):
     if pad > 0:
         pad_im = fill * np.ones(a.shape[:2] + (pad,))
         a = np.concatenate((a, pad_im), 2)
-    long_arr = np.vstack(a.swapaxes(0, 2))
+    long_arr = np.vstack(np.rollaxis(a, -1))
     return np.hstack(np.array_split(long_arr, nr))
