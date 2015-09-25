@@ -280,6 +280,10 @@ def _path_gen(path, recursive):
             yield path
 
 
+# the cache version should be updated whenever a change to the stored dicom files
+# is made in an incompatible manor. For example, adding a new field.
+CACHE_VERSION = 1
+
 def _store_cache(dicomset, filename):
     '''Store a list of dicoms as a pickle object to filename
     Args:
@@ -290,15 +294,22 @@ def _store_cache(dicomset, filename):
     The dicom filename attribute is stored as being relative to the .cache
     directory. Upon loading, it is restored to an absolute path.
     '''
-    dcms = []
+    cache = {
+        'version': CACHE_VERSION,
+        'dcms': []
+    }
     cache_dir = os.path.dirname(filename)
     for dcm in dicomset:
         d = copy.deepcopy(dcm)
         d.filename = os.path.relpath(d.filename, cache_dir)
         del d['pixel_array']
-        dcms.append(d)
+        cache['dcms'].append(d)
     with open(filename, 'w') as f:
-        pickle.dump(dcms, f, pickle.HIGHEST_PROTOCOL)
+        pickle.dump(cache, f, pickle.HIGHEST_PROTOCOL)
+
+
+class DicomCacheException(Exception):
+    pass
 
 
 def _load_cache(filename):
@@ -308,15 +319,22 @@ def _load_cache(filename):
 
     Returns: A list of dicoms from the objects stored in the pickle object
     '''
-    dcms = []
     with open(filename, 'r') as f:
-        dcms = pickle.load(f)
+        cache = pickle.load(f)
+
+    if not hasattr(cache, 'get'):
+        raise DicomCacheException('Failed to read cache from file %s' % filename)
+
+    version = cache.get('version')
+    if version is None or version != CACHE_VERSION:
+        raise DicomCacheException('Read cache version (%d) does not match expected version (%d)' % \
+            (version, CACHE_VERSION))
 
     cache_directory = os.path.dirname(filename)
-    for dcm in dcms:
+    for dcm in cache['dcms']:
         dcm.filename = os.path.abspath(os.path.join(cache_directory, dcm.filename))
         dcm.pixel_array = Lazy(lambda dcm=dcm: dicom.read_file(dcm.filename).pixel_array)
-    return dcms
+    return cache['dcms']
 
 
 def _get_cached(cache, path):
