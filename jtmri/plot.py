@@ -25,6 +25,13 @@ def multi_bar(xlabels, data, yerr=None,
               group_labels=None, group_colors=None, axs=None,
               x_start=0,
               padding=0.15):
+    """ Plot multiple bar plots grouped together
+    Args:
+      xlabels --
+      data    -- 2-d array with first dimension representing groups and the second
+                 representing points in that group
+    """
+
     Ngroups = len(data)
     assert Ngroups > 0
     assert 0 <= padding <= 1.0
@@ -212,3 +219,31 @@ def mean_difference(x, y, ax=None, scatter_kwargs=None):
 
     ax.set_title('Mean-Difference plot\n(mean: {:.3g} std: {:.3g})'.format(m, sd))
     return ax
+
+
+def set_subplots_row_titles(axs, titles, pad=5):
+    """ Set the titles for each row at the far left of the plot """
+    assert len(titles) == len(axs[:, 0]), 'Number of rows must mactch the number of titles'
+    for ax, row in zip(axs[:,0], titles):
+        ax.annotate(row,
+                    xy=(0, 0.5),
+                    xytext=(-ax.yaxis.labelpad - pad, 0),
+                    xycoords=ax.yaxis.label,
+                    textcoords='offset points',
+                    size='large',
+                    ha='right',
+                    va='center')
+
+
+def set_subplots_col_titles(axs, titles, pad=5):
+    """ Set the titles for each column at the far left of the plot """
+    assert len(titles) == len(axs[0]), 'Number of columns must mactch the number of titles'
+    for ax, col in zip(axs[0], titles):
+        ax.annotate(col,
+                    xy=(0.5, 1),
+                    xytext=(0, pad),
+                    xycoords='axes fraction',
+                    textcoords='offset points',
+                    size='large',
+                    ha='center',
+                    va='baseline')
