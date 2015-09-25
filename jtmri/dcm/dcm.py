@@ -435,9 +435,9 @@ def cache(path=None, recursive=False, disp=True, overwrite=False, progress=lambd
     '''
     paths = _path_gen_dirs(path, recursive)
     with progress_meter_ctx(description='cache', disp=disp) as pm:
-        def _progress(n):
-            pm.increment(n)
-            progress(n)
+        def _progress(total_read):
+            pm.increment()
+            progress(total_read)
 
         cnt = 0
         for d in paths:
