@@ -9,6 +9,7 @@ import cPickle as pickle
 from itertools import ifilter, chain
 from collections import defaultdict, Iterable
 from prettytable import PrettyTable
+import arrow
 
 from .siemens import SiemensProtocol
 from ..progress_meter import progress_meter_ctx
@@ -30,6 +31,8 @@ class DicomParser(object):
     @staticmethod
     def to_dict(dcm, wrap=dict):
         d = DicomParser._dicom_to_dict(dcm, wrap)
+        t = arrow.get(d['InstanceCreationDate'] + d['InstanceCreationTime'], 'YYYYMMDDHHmmss.SSSSSS')
+        d['InstanceTimestamp'] = t.timestamp + t.microsecond / 1e6
         d['Siemens'] = wrap(SiemensProtocol.from_dicom(dcm))
         pixel_array = None
         try:
@@ -78,7 +81,7 @@ class DicomParser(object):
 class DicomSet(object):
     def __init__(self, dcms=tuple()):
         self._dcms = list(dcms)
-        key = lambda d: (d.StudyInstanceUID, d.SeriesNumber, d.InstanceNumber)
+        key = lambda d: (d.StudyInstanceUID, d.SeriesNumber, d.InstanceNumber, d.InstanceTimestamp)
         self._dcms.sort(key=key)
 
         self._cache_series = defaultdict(list)
@@ -341,7 +344,7 @@ def _get_cached(cache, path):
 
 
 def read(path=None, disp=True, recursive=False, progress=lambda x:x, use_info=True,
-         use_cache=True, make_cache=False):
+         use_cache=True, make_cache=False, overwrite=False):
     '''Read dicom files from path and print a summary
     Args:
         path       -- (default: cwd) glob like path of dicom files
@@ -351,6 +354,7 @@ def read(path=None, disp=True, recursive=False, progress=lambda x:x, use_info=Tr
         use_info   -- (default: True) Load info from dicom info files (info.yaml)
         use_cache  -- (default: True) Use cached files to quickly load dicoms
         make_cache -- (default: False) Create a cache of dicoms if it doesn't exist
+        overwrite  -- (default: False) Overwrite an existing cache
     Returns: A list of dicom objects. Prints a summary of the dicom objects if disp is True
     '''
     dcmlist = []
@@ -359,7 +363,7 @@ def read(path=None, disp=True, recursive=False, progress=lambda x:x, use_info=Tr
     paths = _path_gen(path, recursive)
 
     if make_cache:
-        cache(path=path, recursive=recursive, disp=disp, progress=progress)
+        cache(path=path, recursive=recursive, disp=disp, progress=progress, overwrite=overwrite)
 
     with progress_meter_ctx(description='read', disp=disp) as pm:
         for p in paths:
