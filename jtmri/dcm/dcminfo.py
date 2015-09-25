@@ -4,7 +4,9 @@ import yaml, copy, collections
 
 from ..utils import AttributeDict, flatten, Lazy
 from ..cache import memoize
-from ..roi import load as load_roi 
+from ..roi import load as load_roi
+from ..fit import fit_r2star_with_threshold
+from .. import asl
 
 
 _sequences = {}
@@ -23,6 +25,8 @@ def _update_meta(meta_new, meta_old):
             if isinstance(val_old, list):
                 assert isinstance(val_new, list)
                 val_old.extend(val_new)
+            else:
+                meta_old[key] = copy.copy(val_new)
         else:
             meta_old[key] = copy.copy(val_new)
 
@@ -75,17 +79,24 @@ class Series(object):
             if key in self.seq_meta_cache:
                 seq_meta = self.seq_meta_cache[key]
             else:
-                seq_meta = self.sequence.create_metadata(dcm, study_dcms)
+                seq_meta = self.sequence.create_metadata(dcm, study_dcms, meta)
                 self.seq_meta_cache[key] = seq_meta
             _update_meta(seq_meta, meta)
 
 
 class GRE(object):
     @staticmethod
-    def create_metadata(dcm, study_dcms):
+    def create_metadata(dcm, study_dcms, old_meta):
         meta = AttributeDict({})
         meta.r2star_series = None
         meta.t2star_series = None
+        def fit(dcm=dcm, study_dcms=study_dcms):
+            series = study_dcms.by_series(dcm.SeriesNumber)
+            data = series.data('SliceLocation')
+            echo_times = series.all_unique.EchoTime / 1000.
+            return fit_r2star_with_threshold(echo_times, data)
+        meta.r2star_offline = fit
+
         meta.sequence = 'gre'
         if dcm.SoftwareVersions == 'syngo MR D13':
             phase_saved = dcm.Siemens.MrPhoenixProtocol['ucReconstructionMode'] == '8'
@@ -114,7 +125,7 @@ _register_seq('gre', GRE)
 
 class ADC(object):
     @staticmethod
-    def create_metadata(dcm, studydcms):
+    def create_metadata(dcm, study_dcms, old_meta):
         meta = AttributeDict({})
         meta.sequence = 'adc'
         return meta
@@ -123,11 +134,40 @@ _register_seq('adc', ADC)
 
 class SE(object):
     @staticmethod
-    def create_metadata(dcm, studydcms):
+    def create_metadata(dcm, study_dcms, old_meta):
         meta = AttributeDict({})
         meta.sequence = 'se'
+        def fit(dcm=dcm, study_dcms=study_dcms):
+            series = study_dcms.by_series(dcm.SeriesNumber) 
+            data = series.data('SliceLocation')
+            echo_times = series.all_unique.EchoTime / 1000.
+            return fit_r2star_with_threshold(echo_times, data)
+        meta.r2_offline = fit
         return meta
 _register_seq('se', SE)
+
+
+class ASL(object):
+    @staticmethod
+    def create_metadata(dcm, study_dcms, old_meta):
+        meta = AttributeDict({})
+        meta.sequence = 'asl'
+        meta.inv_delay = int(dcm.Siemens.MrPhoenixProtocol['sWipMemBlock']['alFree']['1']) / 1000.
+        meta.m0 = study_dcms.by_series(old_meta.m0)
+        def fit_rbf(subject, m0, dcm=dcm, study_dcms=study_dcms, meta=meta):
+            """Find the renal blood flow map
+            Args:
+              subject -- either 'human' or 'rat'
+            """
+            subject = subject.lower()
+            assert subject in asl.rbf_params.keys()
+            data = study_dcms.by_series(dcm.SeriesNumber).data('SliceLocation')
+            pwi = asl.pwi(data)
+            return asl.rbf(pwi, m0, meta.inv_delay, asl.rbf_params[subject]) 
+        meta.rbf_offline = fit_rbf
+        return meta
+_register_seq('asl', ASL) 
+
 
 
 class ROIReader(object):
@@ -193,7 +233,7 @@ def update_metadata_rois(dcms):
 
 def update_metadata(study_infos, dcms):
     for dcm in dcms:
-        dcm.meta = AttributeDict({})
+        dcm.meta = AttributeDict({'sequence': None})
     update_metadata_rois(dcms)
     for study in dcms.studies():
         for info in study_infos:

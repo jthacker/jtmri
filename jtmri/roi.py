@@ -198,6 +198,13 @@ def _filter_viewdims(slc):
 
 
 def save(rois, filename):
+    """ Save ROIs to the file specified by filename
+    Args:
+      rois     -- should be an iterable of rois
+      filename -- string of the name of the file to write too
+
+    Returns: None
+    """
     with h5py.File(filename, 'w') as f:
         root = f.create_group('rois')
         for i,roi in enumerate(rois):
