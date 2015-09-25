@@ -274,3 +274,8 @@ def let(*args, **kwargs):
 def is_sequence(x):
     '''Returns true for all iterables that are not Strings'''
     return isinstance(x, collections.Iterable) and not isinstance(x, types.StringTypes)
+
+
+def config_logger():
+    logging.basicConfig(format="%(asctime)s::%(levelname)s -- %(message)s",
+                        datefmt="%Y-%m-%d %H:%M:%S")
