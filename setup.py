@@ -10,5 +10,6 @@ setup(
             'numpy','traits','traitsui',
             'scikit-image','tqdm',
             'prettytable', 'PySide', 'PyYAML',
-            'pydicom', 'fuzzywuzzy', 'jinja2']
+            'pydicom', 'fuzzywuzzy', 'jinja2',
+            'arrow']
 )
