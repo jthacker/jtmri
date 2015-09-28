@@ -481,7 +481,8 @@ def disp(dicomset, extra_columns=tuple()):
     columns = [('#', 'SeriesNumber'), ('Description', 'SeriesDescription')] \
             + list(extra_columns) \
             + [('Count', lambda s: s.count),
-               ('ROI', lambda s: '*' if hasattr(s.first, 'meta') and s.first.meta.get('roi') else '')]
+               ('Seq', lambda s: s.first.meta.get('sequence') or ''),
+               ('ROI', lambda s: '*' if s.first.meta.get('roi') else '')]
     
     if dicomset.count > 0:
         for study in dicomset.studies():
