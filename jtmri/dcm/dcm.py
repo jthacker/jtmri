@@ -107,10 +107,10 @@ class DicomSet(object):
     def filter(self, func):
         '''Filter the dicoms in this dataset
         Args:
-        func -- predicate function for filtering
+            func -- predicate function for filtering
 
         Returns:
-        A DicomSet with dicoms matching the predicate
+            A DicomSet with dicoms matching the predicate
         '''
         return DicomSet(ifilter(func, self))
 
@@ -282,30 +282,40 @@ def _path_gen(path, recursive):
 
 # the cache version should be updated whenever a change to the stored dicom files
 # is made in an incompatible manor. For example, adding a new field.
-CACHE_VERSION = 1
+CACHE_VERSION = 2
+CULLED_KEYS = ['pixel_array',
+               'meta']
+#               'GreenPaletteColorLookupTableData',
+#               'RedPaletteColorLookupTableData',
+#               'BluePaletteColorLookupTableData',
+#               'OverlayData']
 
-def _store_cache(dicomset, filename):
+def _store_cache(dcms):
     '''Store a list of dicoms as a pickle object to filename
     Args:
-        dicoms   -- An iterable of dicoms
-        filename -- Name of file to store the dicoms in
+        dcms -- list of dicoms
     The pixel arrays are dropped from the dicoms to minimize the
     cached file size. They are then lazy loaded after being unpickled.
     The dicom filename attribute is stored as being relative to the .cache
     directory. Upon loading, it is restored to an absolute path.
     '''
-    cache = {
-        'version': CACHE_VERSION,
-        'dcms': []
-    }
-    cache_dir = os.path.dirname(filename)
-    for dcm in dicomset:
-        d = copy.deepcopy(dcm)
-        d.filename = os.path.relpath(d.filename, cache_dir)
-        del d['pixel_array']
-        cache['dcms'].append(d)
-    with open(filename, 'w') as f:
-        pickle.dump(cache, f, pickle.HIGHEST_PROTOCOL)
+    caches = defaultdict(lambda: {'dcms':[], 'version':CACHE_VERSION})
+    for dcm in dcms:
+        dcm = copy.deepcopy(dcm)
+        dirname, basename = os.path.split(dcm.filename)
+        # Store filename as the basename, abspath is set when loaded
+        dcm.filename = basename
+        for key in CULLED_KEYS:
+            try:
+                del dcm[key]
+            except KeyError:
+                pass
+        caches[dirname]['dcms'].append(dcm)
+    for cache_dir, cache in caches.iteritems():
+        cache_path = os.path.join(cache_dir, CACHE_FILE_NAME)
+        with open(cache_path, 'w') as f:
+            log.debug('writing %d objects to cache at %s' % (len(cache['dcms']), cache_path))
+            pickle.dump(cache, f, protocol=2)
 
 
 class DicomCacheException(Exception):
@@ -320,7 +330,10 @@ def _load_cache(filename):
     Returns: A list of dicoms from the objects stored in the pickle object
     '''
     with open(filename, 'r') as f:
-        cache = pickle.load(f)
+        try:
+            cache = pickle.load(f)
+        except EOFError:
+            raise DicomCacheException('EOF reached while trying to read cache from %s' % filename)
 
     if not hasattr(cache, 'get'):
         raise DicomCacheException('Failed to read cache from file %s' % filename)
@@ -333,73 +346,91 @@ def _load_cache(filename):
     cache_directory = os.path.dirname(filename)
     for dcm in cache['dcms']:
         dcm.filename = os.path.abspath(os.path.join(cache_directory, dcm.filename))
-        dcm.pixel_array = Lazy(lambda dcm=dcm: dicom.read_file(dcm.filename).pixel_array)
-    return cache['dcms']
+        def _load(dcm=dcm):
+            log.debug('loading pixel array from %s' % dcm.filename)
+            return dicom.read_file(dcm.filename).pixel_array
+        dcm.pixel_array = Lazy(_load)
+        yield dcm
 
 
-def _get_cached(cache, path):
+def _get_dcm(path):
+    """Load a dicom file from disk
+    """
+    if not isdicom(path):
+        return None
+    dcm = DicomParser.to_attributedict(dicom.read_file(path))
+    dcm.filename = path
+    log.debug('loaded dicom from disk %s' % path)
+    return dcm
+
+
+def _get_cached_dcm(cache, path):
     '''get path from the dicom cache, loading cache files as needed
     Args:
-        cache -- dictionary like cache to check if path is cached there
+        cache -- cache object
         path  -- path to a dicom
     Returns:
-        return a cached dicom or None if it was unable to find the dicom
+        return a cached dicom or one loaded from disk if it was not found in the cache
     '''
     path = os.path.abspath(path)
-    if path in cache:
-        return cache[path]
     dirname = os.path.dirname(path)
     cache_filename = os.path.join(dirname, CACHE_FILE_NAME)
-    if cache_filename not in cache and os.path.exists(cache_filename):
-        log.debug('loading cache %s' % cache_filename)
-        cache[cache_filename] = True
-        for dcm in _load_cache(cache_filename):
-            key = os.path.relpath(dcm.filename, cache_filename)
-            cache[dcm.filename] = dcm
-        return cache.get(path, None)
-    log.debug('cache not found at {}'.format(cache_filename))
-    return None
+    if cache_filename not in cache['caches'] and os.path.exists(cache_filename):
+        log.debug('loading cache file %s' % cache_filename)
+        try:
+            cache['dcms'].update({dcm.filename:dcm for dcm in _load_cache(cache_filename)})
+            is_stale = False
+        except DicomCacheException as e:
+            log.error(e.message)
+            log.error('Ignoring stale cache')
+            is_stale = True
+        cache['caches'][cache_filename] = is_stale
+    if path in cache['dcms']:
+        log.debug('loaded dicom from cache %s' % path)
+        return cache['dcms'][path]
+    else:
+        dcm = _get_dcm(path)
+        if dcm is not None:
+            cache['dcms'][path] = dcm
+            cache['caches'][cache_filename] = True  # Stale cache
+        return dcm
 
 
-def read(path=None, disp=True, recursive=False, progress=lambda x:x, use_info=True,
-         use_cache=True, make_cache=False, overwrite=False):
+def read(path=None, disp=True, recursive=False, progress=lambda x:x, use_info=True, update_cache=True, dcm_cache=None):
     '''Read dicom files from path and print a summary
     Args:
-        path       -- (default: cwd) glob like path of dicom files
-        disp       -- (default: True) Print a summary
-        recursive  -- (default: False) Recurse into subdirectories
-        progress   -- (default: None) One arg callback function (# dicoms read)
-        use_info   -- (default: True) Load info from dicom info files (info.yaml)
-        use_cache  -- (default: True) Use cached files to quickly load dicoms
-        make_cache -- (default: False) Create a cache of dicoms if it doesn't exist
-        overwrite  -- (default: False) Overwrite an existing cache
+        path         -- (default: cwd) glob like path of dicom files
+        disp         -- (default: True) Print a summary
+        recursive    -- (default: False) Recurse into subdirectories
+        progress     -- (default: None) One arg callback function (# dicoms read)
+        use_info     -- (default: True) Load info from dicom info files (info.yaml)
+        update_cache -- (default: False) Update the cache files
     Returns: A list of dicom objects. Prints a summary of the dicom objects if disp is True
     '''
     dcmlist = []
-    dcm_cache = {}
+    dcm_cache = dcm_cache or {'caches': {}, 'dcms': {}}
     path = path or os.path.curdir
     paths = _path_gen(path, recursive)
 
-    if make_cache:
-        cache(path=path, recursive=recursive, disp=disp, progress=progress, overwrite=overwrite)
-
     with progress_meter_ctx(description='read', disp=disp) as pm:
         for p in paths:
+            dcm = _get_cached_dcm(dcm_cache, p)
+            if dcm is None:
+                log.debug('ignoring non-dicom file %s' % p)
+                continue
             pm.increment()
-            dcm = _get_cached(dcm_cache, p) if use_cache else None
-            if dcm is None:  # path is not in cache
-                if not isdicom(p):
-                    log.debug('ignoring file %s' % p)
-                    continue
-                dcm = DicomParser.to_attributedict(dicom.read_file(p))
-                dcm.filename = os.path.abspath(p)
-                log.debug('loaded from disk %s' % p)
-            else:
-                log.debug('loaded from cache %s' % p)
             dcmlist.append(dcm)
             progress(len(dcmlist))
 
     dicomset = DicomSet(dcmlist)
+    
+    if update_cache:
+        for cache, is_stale in dcm_cache['caches'].iteritems():
+            if not is_stale:
+                continue
+            log.debug('updating cache: %s' % os.path.dirname(cache))
+            _store_cache(read(os.path.dirname(cache), dcm_cache=dcm_cache,
+                              use_info=False, update_cache=False, disp=False))
 
     if use_info:
         infos = dcminfo.read(path, recursive) 
@@ -421,38 +452,29 @@ def _path_gen_dirs(path, recursive):
                 yield p
 
 
-def cache(path=None, recursive=False, disp=True, overwrite=False, progress=lambda x:x):
-    '''Generate dicom cache files for each directory
+def cache(path=None, recursive=False, disp=True, progress=lambda x:x):
+    """Generate dicom cache files for each directory
     Args:
         path      -- (default: cwd) path to find dicoms in.
         recursive -- (default: False) Recurse into subdirectories
         disp      -- (default: True) Display the progress of the cache generation
-        overwrite -- (default: False) Overwrite existing cache files
         progress  -- (default: None) Callback for the progress, returns #dicoms read
 
     This command will search for directories containing dicom files and
     create a cache file for each directory.
-    '''
+    """
     paths = _path_gen_dirs(path, recursive)
     with progress_meter_ctx(description='cache', disp=disp) as pm:
         def _progress(total_read):
             pm.increment()
             progress(total_read)
 
-        cnt = 0
-        for d in paths:
+        for p in paths:
             pm.increment()
-            cache_filename = os.path.join(d, CACHE_FILE_NAME)
-            if not overwrite and os.path.exists(cache_filename):
-                msg = 'skipping existing cache %s. ' % cache_filename
-                msg += 'run with overwrite=True to refresh the cache'
-                pm.set_message(msg)
-                continue
-            dcms = read(d, use_info=False, use_cache=False, disp=False,
-                        progress=_progress)
+            dcms = read(p, use_info=False, disp=False, progress=_progress)
             if len(dcms) > 0:
-                _store_cache(dcms, cache_filename)
-                pm.set_message('cache written to %s' % cache_filename)
+                log.info('saving cache for dicoms in %s' % p)
+                _store_cache(dcms)
 
 
 def _column_name(col):
