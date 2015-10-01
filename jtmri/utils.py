@@ -6,7 +6,7 @@ import os, sys, logging, csv, re, itertools, collections, copy, types
 from collections import Iterable
 
 
-log = logging.getLogger('jtmri.utils')
+log = logging.getLogger(__name__)
 
 
 def unique(seq):
@@ -276,6 +276,8 @@ def is_sequence(x):
     return isinstance(x, collections.Iterable) and not isinstance(x, types.StringTypes)
 
 
-def config_logger():
-    logging.basicConfig(format="%(asctime)s::%(levelname)s -- %(message)s",
+def config_logger(level=logging.INFO):
+    logging.basicConfig(format="%(asctime)s.%(msecs)03d::%(name)s::%(levelname)s -- %(message)s",
                         datefmt="%Y-%m-%d %H:%M:%S")
+    logging.getLogger().setLevel(level)
+    log.info('Log level set to: %s' % level)
