@@ -4,6 +4,7 @@ import os, dicom, logging
 import numpy as np
 import copy
 import shutil
+import re
 import cPickle as pickle
 
 from itertools import ifilter, chain
@@ -31,8 +32,7 @@ class DicomParser(object):
     @staticmethod
     def to_dict(dcm, wrap=dict):
         d = DicomParser._dicom_to_dict(dcm, wrap)
-        t = arrow.get(d['InstanceCreationDate'] + d['InstanceCreationTime'], 'YYYYMMDDHHmmss.SSSSSS')
-        d['InstanceTimestamp'] = t.timestamp + t.microsecond / 1e6
+        d['InstanceCreationTimestamp'] = instance_creation_timestamp(d)
         d['Siemens'] = wrap(SiemensProtocol.from_dicom(dcm))
         pixel_array = None
         try:
@@ -81,7 +81,7 @@ class DicomParser(object):
 class DicomSet(object):
     def __init__(self, dcms=tuple()):
         self._dcms = list(dcms)
-        key = lambda d: (d.StudyInstanceUID, d.SeriesNumber, d.InstanceNumber, d.InstanceTimestamp)
+        key = lambda d: (d.StudyInstanceUID, d.SeriesNumber, d.InstanceNumber, d.InstanceCreationTimestamp)
         self._dcms.sort(key=key)
 
         self._cache_series = defaultdict(list)
@@ -540,3 +540,25 @@ def dcm_copy(dicoms, dest):
         filename = dcm.filename
         base = os.path.basename(filename)
         shutil.copy(filename, os.path.join(dest, base))
+
+
+def instance_creation_timestamp(dcm):
+    t = arrow.get(dcm.get('InstanceCreationDate') + dcm.get('InstanceCreationTime'), 'YYYYMMDDHHmmss.SSSSSS')
+    return t.timestamp + t.microsecond / 1e6
+
+
+_clean_rgx = re.compile('[^\w\-\_]')
+def _clean(attr):
+    return _clean_rgx.sub('_', attr)
+
+def canonical_filename(dcm, ext='ima'):
+    """Returns the canonical name for a dicom file"""
+    attrs = [dcm.PatientName,
+             dcm.Modality,
+             dcm.StudyDescription,
+             '%04d' % int(dcm.StudyID),
+             '%04d' % dcm.SeriesNumber,
+             '%04d' % dcm.InstanceNumber,
+             '%0.3f' % instance_creation_timestamp(dcm),
+             ext]
+    return '.'.join(_clean(attr) for attr in attrs)

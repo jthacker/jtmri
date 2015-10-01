@@ -1,15 +1,9 @@
 #!/usr/bin/env python
 import argparse
 import os
-import re
 import shutil
-import jtmri.dcm
 import sys
-
-_rgx = re.compile('[^\w\-\_]')
-
-def clean(attr):
-    return _rgx.sub('_', attr)
+import jtmri.dcm
 
 def filter_expr(expr_str):
     if expr_str is None:
@@ -41,11 +35,7 @@ if __name__ == '__main__':
     for f in args.files:
         dcms = jtmri.dcm.read(f, disp=False)
         for dcm in dcms.filter(args.filter):
-            attrs = [dcm.PatientName, dcm.Modality, dcm.StudyDescription, 
-                    '%04d' % int(dcm.StudyID), '%04d' % dcm.SeriesNumber, 
-                    '%04d' % dcm.InstanceNumber, dcm.SeriesDate, dcm.AcquisitionTime, 
-                    args.ext]
-            filename = '.'.join(clean(attr) for attr in attrs)
+            filename = jtmri.dcm.dcm.canonical_filename(dcm)
             dirname = args.outputdir if args.outputdir else os.path.basename(dcm.filename)
             path = os.path.join(dirname, filename)
             print('%s -> %s' % (os.path.relpath(dcm.filename), os.path.relpath(path)))
