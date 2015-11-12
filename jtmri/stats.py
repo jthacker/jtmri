@@ -36,15 +36,15 @@ class Tests(object):
         self.cols = cols
    
 
-def tests(data, groups, tests, stat, adj):
-    '''Generate a table of test statistics.
+def tests(data, groups, tests, stat, adj=None):
+    """Generate a table of test statistics.
     Args:
-     data   -- Pandas dataframe
-     groups -- Groups
-     tests  -- Tests object
-     stat   -- Statistics to perform for each test
-     adj    -- Adjust p-values if True
-    '''
+        data   -- Pandas dataframe
+        groups -- Groups
+        tests  -- Tests object
+        stat   -- Statistics to perform for each test
+        adj    -- (default: None) Adjust p-values byt groups if True
+    """
     out = []
     cols = ['test']
     cols += list(groups)
@@ -61,7 +61,7 @@ def tests(data, groups, tests, stat, adj):
             a, b = df_a[col], df_b[col]
             statistic, p = stat(a, b)
             row = [col]
-            row += list(key)
+            row += [key]
             row += [a.mean(), a.std(), b.mean(), b.std()]
             row += [len(a), len(b)]
             row += [p, sig(p), cohens_d(a,b)]
