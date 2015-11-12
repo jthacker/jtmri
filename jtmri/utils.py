@@ -1,10 +1,17 @@
+import collections
+import copy
+import csv
+from fuzzywuzzy import fuzz
+from glob import iglob
+import inspect
+import itertools
+import logging
 import numpy as np 
 import pylab as plt 
-import inspect
-from fuzzywuzzy import fuzz
-import os, sys, logging, csv, re, itertools, collections, copy, types
-from collections import Iterable
-
+import os
+import re
+import sys
+import types
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +55,7 @@ def extract(arr, threshold=0, padding=0, return_idx=False):
     When return_idx is True, than a tuple of the indicies used for sliceing
     and the sliced array are returned.
     '''
-    if isinstance(padding, Iterable):
+    if isinstance(padding, collections.Iterable):
         assert len(padding) == arr.ndim, 'padding must be same length as arr.ndim'
     else:
         padding = [padding] * arr.ndim
@@ -206,7 +213,7 @@ class ListAttrAccessor(object):
         Attributes starting with and underscore ('_') are ignored.
         '''
         self._attributes = []
-        if isinstance(attributes, Iterable):
+        if isinstance(attributes, collections.Iterable):
             self._attributes = attributes
         elif len(item_list) > 0:
             self._attributes = attributes(item_list[0])
