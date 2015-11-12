@@ -161,8 +161,16 @@ def imshow(img, imshow_args={}, title='', label='', ax=None):
 
 
 def label_bars(bbox0, bbox1, text, y_offset=None, y_text_offset=None, ax=None):
-    '''Place a label between two bars.
-    Useful for indicating significant differences'''
+    """Place a label between two bars
+    Useful for indicating significant differences on a bar plot
+    Args:
+        bbox0         --
+        bbox1         --
+        text          --
+        y_offset      --
+        y_text_offset --
+        ax            --
+    """
     if ax is None:
         ax = pl.gca()
 
@@ -187,6 +195,29 @@ def label_bars(bbox0, bbox1, text, y_offset=None, y_text_offset=None, ax=None):
     ax.annotate(text, xy=((xy0[0] + xy1[0]) / 2., xy0[1] + y_text_offset),
                 zorder=10,
                 ha='center')
+
+def annotate_difference(pos0, pos1, text, text_offset=(0, 0), below=False, ax=None):
+    """Links two points with a line and draws text in the middle.
+    Useful for annotating significant differences.
+    Args:
+        pos0        -- tuple of (x, y) coordinates indicating the first point
+        pos1        -- tuple of (x, y) cooridnates indicating the second point
+        text        -- Text to draw in the middle
+        text_offset -- Shift text by a tuple of (x, y) coorinates
+        below       -- (default: False) Draw above or below points
+        ax          -- (default: pl.gca()) axis to apply annotation to
+    """
+    ax = ax or pl.gca()
+    arrowprops = {
+        'connectionstyle': 'bar,fraction={}'.format(-0.3 if below else 0.3),
+        'arrowstyle': '-',
+        'lw': 1
+    }
+    ax.annotate('', xy=pos0, xytext=pos1, zorder=10, arrowprops=arrowprops)
+    # Draw text in the middle
+    mid_point = ((pos0[0] + pos1[0]) / 2. + text_offset[0],
+                 (pos0[1] + pos1[1]) / 2. + text_offset[1])
+    ax.annotate(text, xy=mid_point, zorder=10, ha='center')
 
 
 def mean_difference(x, y, ax=None, scatter_kwargs=None):
