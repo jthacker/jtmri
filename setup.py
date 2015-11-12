@@ -8,9 +8,13 @@ setup(
         packages=find_packages(),
         include_package_data = True,
         install_requires=[
-            'numpy','traits','traitsui',
-            'scikit-image','tqdm',
-            'prettytable', 'PySide', 'PyYAML',
-            'pydicom', 'fuzzywuzzy', 'jinja2',
+            'numpy',
+            'scikit-image',
+            'prettytable',
+            'PyYAML',
+            'matplotlib',
+            'pydicom',
+            'fuzzywuzzy',
+            'jinja2',
             'arrow']
 )
