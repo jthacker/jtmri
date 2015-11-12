@@ -15,7 +15,7 @@ import arrow
 from .siemens import SiemensProtocol
 from ..progress_meter import progress_meter_ctx
 from ..utils import (unique, AttributeDict, ListAttrAccessor, Lazy,
-                     is_sequence)
+                     is_sequence, path_generator)
 from . import dcminfo
 
 
@@ -265,20 +265,6 @@ def data(iterable, field, groupby=tuple(), reshape=True):
         return np.array([])
 
 
-def _path_gen(path, recursive):
-    path = os.path.expanduser(path) if path else os.path.abspath(os.path.curdir)
-
-    if os.path.isdir(path):
-        path = os.path.join(path, '*') 
-    
-    for path in iglob(path):
-        if recursive and os.path.isdir(path):
-            for root,_,files in os.walk(path):
-                for f in files:
-                    yield os.path.join(root,f)
-        else:
-            yield path
-
 
 # the cache version should be updated whenever a change to the stored dicom files
 # is made in an incompatible manor. For example, adding a new field.
@@ -410,7 +396,7 @@ def read(path=None, disp=True, recursive=False, progress=lambda x:x, use_info=Tr
     dcmlist = []
     dcm_cache = dcm_cache or {'caches': {}, 'dcms': {}}
     path = path or os.path.curdir
-    paths = _path_gen(path, recursive)
+    paths = path_generator(path, recursive)
 
     with progress_meter_ctx(description='read', disp=disp) as pm:
         for p in paths:

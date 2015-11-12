@@ -281,3 +281,29 @@ def config_logger(level=logging.INFO):
                         datefmt="%Y-%m-%d %H:%M:%S")
     logging.getLogger().setLevel(level)
     log.info('Log level set to: %s' % level)
+
+
+def path_generator(path, recursive=False):
+    """Generate paths starting at the base path and recursing as requested
+    Args:
+        path      -- glob like path describer (~ is expanded)
+                     if None, the current directory is used
+        recursive -- (default: False) recurse into all paths described by path
+    
+    Return: Generates a sequence of paths
+    """
+    if path is None:
+        path = os.path.abspath(os.path.curdir)
+    path = os.path.expanduser(path)
+
+    if os.path.isdir(path):
+        path = os.path.join(path, '*') 
+    
+    for p in iglob(path):
+        # Generate all paths for directories too if recursive is enabled
+        if recursive and os.path.isdir(p):
+            for root,_,files in os.walk(p):
+                for f in files:
+                    yield os.path.join(root,f)
+        else:
+            yield p
