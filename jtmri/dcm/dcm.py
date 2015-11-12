@@ -357,39 +357,40 @@ def _get_dcm(path):
     return dcm
 
 
-def _get_cached_dcm(cache, path):
+def _get_cached_dcm(cache, path, no_cache):
     '''get path from the dicom cache, loading cache files as needed
     Args:
-        cache -- cache object
-        path  -- path to a dicom
+        cache    -- cache object
+        path     -- path to a dicom
+        no_cache -- disable cacheing, only load from disk
     Returns:
         return a cached dicom or one loaded from disk if it was not found in the cache
     '''
     path = os.path.abspath(path)
     dirname = os.path.dirname(path)
     cache_filename = os.path.join(dirname, CACHE_FILE_NAME)
-    if cache_filename not in cache['caches'] and os.path.exists(cache_filename):
-        log.debug('loading cache file %s' % cache_filename)
-        try:
-            cache['dcms'].update({dcm.filename:dcm for dcm in _load_cache(cache_filename)})
-            is_stale = False
-        except DicomCacheException as e:
-            log.error(e.message)
-            log.error('Ignoring stale cache')
-            is_stale = True
-        cache['caches'][cache_filename] = is_stale
-    if path in cache['dcms']:
-        log.debug('loaded dicom from cache %s' % path)
-        return cache['dcms'][path]
-    else:
-        dcm = _get_dcm(path)
-        if dcm is not None:
-            cache['dcms'][path] = dcm
-            cache['caches'][cache_filename] = True  # Stale cache
-        return dcm
+    if not no_cache:
+        if cache_filename not in cache['caches'] and os.path.exists(cache_filename):
+            log.debug('loading cache file %s' % cache_filename)
+            try:
+                cache['dcms'].update({dcm.filename:dcm for dcm in _load_cache(cache_filename)})
+                is_stale = False
+            except DicomCacheException as e:
+                log.error(e.message)
+                log.error('Ignoring stale cache')
+                is_stale = True
+            cache['caches'][cache_filename] = is_stale
+        if path in cache['dcms']:
+            log.debug('loaded dicom from cache %s' % path)
+            return cache['dcms'][path]
+    dcm = _get_dcm(path)
+    if dcm is not None:
+        cache['dcms'][path] = dcm
+        cache['caches'][cache_filename] = True  # Stale cache
+    return dcm
 
 
-def read(path=None, disp=True, recursive=False, progress=lambda x:x, use_info=True, update_cache=True, dcm_cache=None):
+def read(path=None, disp=True, recursive=False, progress=lambda x:x, use_info=True, update_cache=True, dcm_cache=None, no_cache=False):
     '''Read dicom files from path and print a summary
     Args:
         path         -- (default: cwd) glob like path of dicom files
@@ -398,6 +399,7 @@ def read(path=None, disp=True, recursive=False, progress=lambda x:x, use_info=Tr
         progress     -- (default: None) One arg callback function (# dicoms read)
         use_info     -- (default: True) Load info from dicom info files (info.yaml)
         update_cache -- (default: False) Update the cache files
+        no_cache     -- (default: False) Disable the cache
     Returns: A list of dicom objects. Prints a summary of the dicom objects if disp is True
     '''
     dcmlist = []
@@ -407,7 +409,7 @@ def read(path=None, disp=True, recursive=False, progress=lambda x:x, use_info=Tr
 
     with progress_meter_ctx(description='read', disp=disp) as pm:
         for p in paths:
-            dcm = _get_cached_dcm(dcm_cache, p)
+            dcm = _get_cached_dcm(dcm_cache, p, no_cache)
             if dcm is None:
                 log.debug('ignoring non-dicom file %s' % p)
                 continue
@@ -445,13 +447,14 @@ def _path_gen_dirs(path, recursive):
                 yield p
 
 
-def cache(path=None, recursive=False, disp=True, progress=lambda x:x):
+def cache(path=None, recursive=False, disp=True, progress=lambda x:x, full=False):
     """Generate dicom cache files for each directory
     Args:
         path      -- (default: cwd) path to find dicoms in.
         recursive -- (default: False) Recurse into subdirectories
         disp      -- (default: True) Display the progress of the cache generation
         progress  -- (default: None) Callback for the progress, returns #dicoms read
+        full      -- (default: False) Fully update cache, re-reads all dicoms (very slow)
 
     This command will search for directories containing dicom files and
     create a cache file for each directory.
@@ -464,7 +467,7 @@ def cache(path=None, recursive=False, disp=True, progress=lambda x:x):
 
         for p in paths:
             pm.increment()
-            dcms = read(p, use_info=False, disp=False, progress=_progress)
+            dcms = read(p, use_info=False, disp=False, progress=_progress, no_cache=full)
             if len(dcms) > 0:
                 log.info('saving cache for dicoms in %s' % p)
                 _store_cache(dcms)
