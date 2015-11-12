@@ -1,16 +1,10 @@
 import collections
 import copy
-import csv
-from fuzzywuzzy import fuzz
 from glob import iglob
-import inspect
 import itertools
 import logging
 import numpy as np 
-import pylab as plt 
 import os
-import re
-import sys
 import types
 
 log = logging.getLogger(__name__)
@@ -251,6 +245,7 @@ def similar(s1, s2, threshold=90):
     A predicate function that returns True if the 
     argument is similar to the matcher otherwise False.
     '''
+    from fuzzywuzzy import fuzz
     return fuzz.partial_ratio(s1, s2) >= threshold
 
 
