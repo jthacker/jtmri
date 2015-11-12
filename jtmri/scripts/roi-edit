@@ -1,0 +1,95 @@
+#!/usr/bin/env python
+import argparse
+import jtmri.roi
+
+description = """\
+roi-edit: Edit a list of ROI files
+
+Usage:
+# Change the 2nd dimension to 0 and 3rd dimension to 5 and extend the dimensions to 10
+> roi-edit --dim=2 --dim=3,5 --ndim=10 rois.h5
+
+# Rename rois named kidney to liver and lung to heart
+> roi-edit --rename=kidney,liver --rename=lung,heart rois.h5
+"""
+
+def dim_edit_type(val):
+    splits = map(int, val.split(','))
+    if len(splits) > 0:
+        dim = splits[0]
+        val = 0
+    if len(splits) == 2:
+        val = splits[1]
+    if len(splits) > 2:
+        raise TypeError('A dim edit should be of the form "dim" or "dim,val"')
+    return dim, val
+
+
+def rename_type(val):
+    splits = val.split(',')
+    if len(splits) != 2:
+        raise TypeError('A rename edit should be of the form "old_name,new_name"')
+    return splits
+
+
+def fmt_slc(slc):
+    return ','.join(map(str, slc))
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument('--dim', default=[], action='append', type=dim_edit_type, help='dimension to flatten')
+    parser.add_argument('--ndim', default=-1, type=int, help='final number of dimensions')
+    parser.add_argument('--pretend', action='store_true')
+    parser.add_argument('--rename', default=[], action='append', type=rename_type, help='rename mappings')
+    parser.add_argument('files', nargs='+', help='roi files to flatten')
+    args = parser.parse_args()
+
+    if args.pretend:
+        print('Pretending, file saving is disabled')
+
+    name_map = dict(args.rename)
+
+    for f in args.files:
+        print('Editing rois in %s' % f)
+        rois = jtmri.roi.load(f)
+        for roi in rois:
+            slc = list(roi.slc)
+            # Edit all dimensions from cli args
+            for dim, val in args.dim:
+                # Cannot edit a view dimension
+                if dim in roi.slc.viewdims:
+                    raise Exception("cannot edit dimension {} because it is a view dimension, file:{}, roi:{}"\
+                            .format(dim, f, roi))
+                if dim >= len(slc):
+                    raise Exception("dimension {} is too big for roi with only {} dimensions, file:{}, roi:{}"\
+                            .format(dim, len(slc), f, roi))
+                slc[dim] = val
+            # Add or subtract dimensions from end of slice
+            if args.ndim > -1:
+                for d in roi.slc.viewdims:
+                    if d >= args.ndim:
+                        raise Exception("reducing dimesions from {} to {} destroys a view dimension ({}, {}), file:{}, roi:{}"\
+                                .format(len(slc), args.ndim, d, slc[d], f, roi))
+                if args.ndim > len(slc):
+                    slc = slc + [0] * (args.ndim - len(slc))
+                else:
+                    slc = slc[:args.ndim]
+
+            slc = jtmri.roi.SliceTuple(slc)
+            name = name_map.get(roi.name, roi.name)
+
+            edits = []
+            edits.append('slice: {} -> {}'.format(fmt_slc(roi.slc), fmt_slc(slc)))
+            if name != roi.name:
+                edits.append('name: {} -> {}'.format(roi.name, name))
+            else:
+                edits.append('name: {}'.format(roi.name))
+            print('  '.join(edits)) 
+
+            roi.slc = slc
+            roi.name = name
+        if not args.pretend:
+            jtmri.roi.store(rois, f)
+            print('Saving rois to %s' % f)
+        print
