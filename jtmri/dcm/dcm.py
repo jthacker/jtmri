@@ -78,6 +78,16 @@ class DicomParser(object):
         return wrap(d)
 
 
+def read_and_scale_pixel_array(dcm):
+    log.debug('loading pixel array from %s' % dcm.filename)
+    pixel_array = dicom.read_file(dcm.filename).pixel_array.astype(float)
+    if 'RescaleSlope' in dcm:
+        pixel_array *= dcm.RescaleSlope
+    if 'RescaleIntercept' in dcm:
+        pixel_array += dcm.RescaleIntercept
+    return pixel_array
+
+
 class DicomSet(object):
     def __init__(self, dcms=tuple()):
         self._dcms = list(dcms)
@@ -332,10 +342,7 @@ def _load_cache(filename):
     cache_directory = os.path.dirname(filename)
     for dcm in cache['dcms']:
         dcm.filename = os.path.abspath(os.path.join(cache_directory, dcm.filename))
-        def _load(dcm=dcm):
-            log.debug('loading pixel array from %s' % dcm.filename)
-            return dicom.read_file(dcm.filename).pixel_array
-        dcm.pixel_array = Lazy(_load)
+        dcm.pixel_array = Lazy(lambda dcm=dcm: read_and_scale_pixel_array(dcm))
         yield dcm
 
 
