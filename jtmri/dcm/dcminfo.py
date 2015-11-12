@@ -169,6 +169,18 @@ class ASL(object):
 _register_seq('asl', ASL) 
 
 
+class ASLNAV(object):
+    """ASLNAV is Huan's sequence that must be reconstructed from raw data in Matlab.
+    Use this to label the dicom converted rbf.mat.
+    """
+    @staticmethod
+    def create_metadata(dcm, study_dcms, old_meta):
+        meta = AttributeDict({})
+        meta.sequence = 'asl-nav'
+        meta.inv_delay = int(dcm.Siemens.MrPhoenixProtocol['sWipMemBlock']['alFree']['1']) / 1000.
+        return meta
+_register_seq('asl-nav', ASLNAV) 
+
 
 class ROIReader(object):
     @memoize
