@@ -1,10 +1,14 @@
+import collections
+import copy
 from glob import iglob
-import os, os.path
-import yaml, copy, collections
+import os
+import os.path
+import re
+import yaml
 
 from ..utils import AttributeDict, flatten, Lazy
 from ..cache import memoize
-from ..roi import load as load_roi
+from ..roi import read as read_roi
 from ..fit import fit_r2star_with_threshold
 from .. import asl
 
@@ -182,22 +186,6 @@ class ASLNAV(object):
 _register_seq('asl-nav', ASLNAV) 
 
 
-class ROIReader(object):
-    @memoize
-    def __call__(self, rois_dir, series_number):
-        rois = {}
-        roi_files = {}
-        for dirpath, dirnames, filenames in os.walk(rois_dir):
-            for filename in filenames:
-                if filename == 'series_%02d.h5' % series_number:
-                    roi_file = os.path.join(dirpath, filename)
-                    tag = os.path.relpath(dirpath, rois_dir)
-                    tag = '/' if tag == '.' else '/' + tag
-                    rois[tag] = Lazy(lambda roi_file=roi_file, tag=tag: load_roi(roi_file, tag))
-                    roi_files[tag] = roi_file
-        return rois, roi_files
-
-
 def _convert(raw_infos):
     '''Convert a raw info (yaml file) to a function that combines information
     from a dcm and the raw info'''
@@ -232,15 +220,49 @@ def read(path, recursive):
     return infos
 
 
+class ROIReader(object):
+    """Lazily load rois
+    The call method on this class is used to return Lazy objects that will
+    load ROIs from disk. Lazy objects need to be placed in attributes in the AttributeDict
+    in order to be auto loaded when requested.
+
+    Call is memoized as well so it will return the same object when called with the 
+    same arguments
+    """
+    def __init__(self):
+        self._paths = {}
+        self._pattern = re.compile(r'series_([0-9]+)\.h5')
+
+    def _get_paths(self, rois_dir):
+        if rois_dir in self._paths:
+            return self._paths[rois_dir]
+
+        series_files = collections.defaultdict(list)
+        for dirpath, dirnames, filenames in os.walk(rois_dir):
+            for filename in filenames:
+                m = self._pattern.match(filename)
+                if m:
+                    series_number = int(m.group(1))
+                    path = os.path.abspath(os.path.join(dirpath, filename))
+        self._paths[rois_dir] = series_files
+        return series_files
+    
+    @memoize
+    def __call__(self, roidir, series_number):
+        """Find all rois for the given series_number under the rois directory
+        """
+        # TODO: This method should be converted to using the new ROI props method
+        roi_files = []
+        paths = self._get_paths(roidir).get(series_number, [])
+        return Lazy(lambda paths=paths, roidir=roidir: read_roi(paths, roidir))
+
+
 def update_metadata_rois(dcms):
     '''Reread rois from disk'''
     roi_reader = ROIReader()
     for dcm in dcms:
         rois_dir = os.path.join(os.path.dirname(dcm['filename']), 'rois')
-        rois, roi_files = roi_reader(rois_dir, dcm.SeriesNumber)
-        # ROI is set with an AttributeDict because of they are lazily loaded
-        dcm.meta['roi'] = AttributeDict(rois)
-        dcm.meta['roi_filename'] = roi_files
+        dcm.meta['roi'] = roi_reader(rois_dir, dcm.SeriesNumber)
 
 
 def update_metadata(study_infos, dcms):

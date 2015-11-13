@@ -5,7 +5,6 @@ import itertools
 import logging
 import numpy as np 
 import os
-import types
 
 log = logging.getLogger(__name__)
 
@@ -99,6 +98,12 @@ class AttributeDict(collections.MutableMapping):
     # to resolve the missing attribute, leading to an infinite recursion.
     _store = {}  
 
+    # collection.MutableMapping requires:
+    # __delitem__, __setitem__, __getitem__, __iter__, __len__
+    #
+    # and provides:
+    # __contains__, keys, items, values, get, __eq__, __ne__, pop, popitem, clear, update, and setdefault
+
     def __init__(self, dic):
         self.__dict__['_store'] = dic
 
@@ -152,11 +157,8 @@ class DefaultAttributeDict(AttributeDict):
 
 def as_iterable(val):
     '''If val is not iterable then return it wrapped in a list,
-    otherewise just return val'''
-    if not isinstance(val, collections.Iterable):
-        return [val]
-    else:
-        return val
+    otherewise just return val, strings will be wraped in a list as well'''
+    return val if is_sequence(val) else [val]
 
 
 def rep(self, props):
@@ -174,6 +176,8 @@ def rep(self, props):
 
 
 class GenLen(object):
+    """Wrapper for a generator that has a known length"""
+
     def __init__(self, iterator, length):
         self._iterator = iterator
         self._length = length
@@ -275,7 +279,7 @@ def let(*args, **kwargs):
 
 def is_sequence(x):
     '''Returns true for all iterables that are not Strings'''
-    return isinstance(x, collections.Iterable) and not isinstance(x, types.StringTypes)
+    return isinstance(x, collections.Iterable) and not isinstance(x, basestring)
 
 
 def config_logger(level=logging.INFO):
@@ -288,7 +292,7 @@ def config_logger(level=logging.INFO):
 def path_generator(path, recursive=False):
     """Generate paths starting at the base path and recursing as requested
     Args:
-        path      -- glob like path describer (~ is expanded)
+        path      -- glob like path describer (~ is expanded), or iterable of paths
                      if None, the current directory is used
         recursive -- (default: False) recurse into all paths described by path
     
@@ -296,16 +300,122 @@ def path_generator(path, recursive=False):
     """
     if path is None:
         path = os.path.abspath(os.path.curdir)
-    path = os.path.expanduser(path)
 
-    if os.path.isdir(path):
-        path = os.path.join(path, '*') 
-    
-    for p in iglob(path):
-        # Generate all paths for directories too if recursive is enabled
-        if recursive and os.path.isdir(p):
-            for root,_,files in os.walk(p):
-                for f in files:
-                    yield os.path.join(root,f)
+    for path in as_iterable(path):
+        path = os.path.expanduser(path)
+
+        if os.path.isdir(path):
+            path = os.path.join(path, '*') 
+        
+        for p in iglob(path):
+            # Generate all paths for directories too if recursive is enabled
+            if recursive and os.path.isdir(p):
+                for root,_,files in os.walk(p):
+                    for f in files:
+                        yield os.path.join(root,f)
+            else:
+                yield p
+
+
+class OrderedDefaultDict(collections.OrderedDict):
+    def __init__(self, *args, **kwargs):
+        if not args:
+            self.default_factory = None
         else:
-            yield p
+            if not (args[0] is None or callable(args[0])):
+                raise TypeError('first argument must be callable or None')
+            self.default_factory = args[0]
+            args = args[1:]
+        super(OrderedDefaultDict, self).__init__(*args, **kwargs)
+
+    def __missing__ (self, key):
+        if self.default_factory is None:
+            raise KeyError(key)
+        self[key] = default = self.default_factory()
+        return default
+
+    def __reduce__(self):  # optional, for pickle support
+        args = (self.default_factory,) if self.default_factory else ()
+        return self.__class__, args, None, None, self.iteritems()
+
+
+class Grouped(collections.Mapping):
+    def __init__(self, dic, _keylen=None):
+        self._dic = collections.OrderedDict(dic)
+        self._keylen = _keylen or len(self._dic.iterkeys().next())
+
+    def __iter__(self):
+        return iter(self._dic)
+
+    def __len__(self):
+        return len(self._dic)
+
+    def __getitem__(self, key):
+        key = tuple(as_iterable(key))
+        keylen = len(key)
+        if keylen < self._keylen:
+            return Grouped(collections.OrderedDict((k[keylen:], v) for k, v in self._dic.iteritems() if k[:keylen] == key),
+                           self._keylen - keylen)
+        return self._dic[key]
+        
+
+
+def groupby(iterable, grouper=lambda x: x, group_type=list):
+    """Group items in an iterable together by key, no presorting necessary
+    Args:
+        iterable    -- an iterable
+        grouper     -- (default: ident func) a callable, a single attribute or a list of attributes and callables
+        group_type  -- (default: list) set the container type for each group returned
+        nested      -- (default: False) This will nest each group in another dictionary
+    
+    Returns:
+        OrderedDict sorted on the group keys
+
+    Examples:
+    # Group integers by parity
+    >>> groupby(range(10), lambda x: x % 2 == 0)
+    OrderedDict([((False,), [1, 3, 5, 7, 9]), ((True,), [0, 2, 4, 6, 8])])
+
+    # Group objects by an attribute
+    >>> from collections import namedtuple
+    >>> A = namedtuple('A', 'field')
+    >>> groupby(map(A, range(3)), 'field')
+    OrderedDict([((0,), [A(field=0)]), ((1,), [A(field=1)]), ((2,), [A(field=2)])])
+
+    # Groupby by multiple attributes or functions
+    >>> Square = namedtuple('Square', 'color,h,w')
+    >>> lst = [Square('red', 10, 20), Square('green', 10, 20), Square('red', 20, 10), Square('green', 20, 10)]
+    >>> # Group by color and area
+    >>> groupby(lst, ['color', lambda s: s.h * s.w])
+    OrderedDict([(('green', 200),
+                  [Square(color='green', h=10, w=20),
+                   Square(color='green', h=20, w=10)]),
+                 (('red', 200),
+                  [Square(color='red', h=10, w=20),
+                   Square(color='red', h=20, w=10)])])
+
+    # Output can be controlled with group_type and nested.
+    # Nesting allows each selection of groups
+    >>> groupby(lst, ['color', lambda s: s.h * s.w], group_type=tuple, nested=True)
+    OrderedDict([('red',
+                  OrderedDict([(200,
+                                [Square(color='red', h=10, w=20),
+                                 Square(color='red', h=20, w=10)])])),
+                 ('green',
+                  OrderedDict([(200,
+                                [Square(color='green', h=10, w=20),
+                                 Square(color='green', h=20, w=10)])]))])
+    """
+    keyfuncs = []
+    for f in as_iterable(grouper):
+        if callable(f):
+            keyfuncs.append(f)
+        elif isinstance(f, basestring):
+            keyfuncs.append(lambda x, f=f: getattr(x, f))
+        else:
+            raise TypeError('{!r} of type {!r} cannot be used in a grouper'.format(f, type(f)))
+    out = OrderedDefaultDict(list)
+    for item in iterable:
+        key = tuple(f(item) for f in keyfuncs)
+        out[key].append(item)
+    return Grouped((k, group_type(v)) for k, v in out.iteritems())

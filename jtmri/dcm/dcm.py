@@ -15,7 +15,7 @@ import arrow
 from .siemens import SiemensProtocol
 from ..progress_meter import progress_meter_ctx
 from ..utils import (unique, AttributeDict, ListAttrAccessor, Lazy,
-                     is_sequence, path_generator)
+                     is_sequence, path_generator, groupby)
 from . import dcminfo
 
 
@@ -124,8 +124,8 @@ class DicomSet(object):
         '''
         return DicomSet(ifilter(func, self))
 
-    def groupby(self, key):
-        return groupby(self, key=key, outtype=DicomSet)
+    def groupby(self, grouper):
+        return groupby(self, grouper, group_type=DicomSet)
 
     def by_series(self, *nums):
         return DicomSet(chain.from_iterable(self._cache_series.get(n, tuple()) for n in nums))
@@ -134,10 +134,12 @@ class DicomSet(object):
         return self.filter(lambda d: d.StudyID in studyids)
 
     def series(self):
+        """Iterable of DicomSets for each series in the current DicomSet"""
         for num in unique(self.all.SeriesNumber):
             yield self.by_series(num)
 
     def studies(self):
+        """Iterable of DicomSets for each study in the current DicomSet"""
         for sid in unique(self.all.StudyInstanceUID):
             yield self.filter(lambda d: d.StudyInstanceUID == sid)
 
@@ -151,9 +153,15 @@ class DicomSet(object):
         return data(self, field='pixel_array', groupby=groupby)
 
     def cp(self, dest):
-        '''Copy dicom files to dest directory'''
+        """Copy dicom files to dest directory"""
         return dcm_copy(self, dest)
-   
+
+    def rois(self, data_groupby=tuple(), roi_groupby=tuple()):
+        """Apply ROIs to the data defined by the groupby
+        Args:
+            data_groupby -- Group data by key (see groupby).
+        """
+    
     @property
     def count(self):
         return len(self)
@@ -179,52 +187,6 @@ def isdicom(path):
     return isdcm
 
 
-def groupby(dicoms, key=lambda x: x, sort=True, outtype=list):
-    '''Group dicoms together by key, no presorting necessary
-    Args:
-    dicoms  -- an iterable of dicoms
-    key     -- a callable, a single key or a list of keys and callables
-    sort    -- sort the groups by key
-
-    Returns:
-    A list of tuples with the structure ((key0, group0), (key1, group1), ... )
-
-    Examples:
-    # Group by the key SeriesNumber
-    >>> groupby(dicoms, 'SeriesNumber')
-    [(0, [dcm1, dcm2, ...]), (1, [dcm3, dcm4]), (2, [dcm5, dcm6]), ...]
-    
-    # Group even and odd SeriesNumbers, results are based on the series numbers
-    # from the previous examples (eg. dcm1 and dcm2 have series number 0)
-    >>> groupby(dicoms, lambda x: x.SeriesNumber % 2 == 0)
-    [(True, [dcm1, dcm2, dcm5, dcm6, ...]), (False, [dcm3, dcm4, dcm7, dcm8, ...])]
-
-    # Groupy by the key StudyInstanceUID then SeriesInstanceUID
-    >>> groupby(dicoms, ('StudyInstanceUID', 'SeriesInstanceUID'))
-    [(0, [(0, [dcm1]), (1, [dcm2])]), (1, [(0, [dcm3]), (1, [dcm4])])]
-    '''
-    keyfunc = None
-    extrakeys = None
-    if callable(key):
-        keyfunc = key
-    else:
-        if isinstance(key, Iterable) and not isinstance(key, str):
-            key,extrakeys = key[0],key[1:]
-        keyfunc = lambda x, key=key: x.get(key)
-
-    d = defaultdict(outtype)
-    for dcm in dicoms:
-        d[keyfunc(dcm)].append(dcm)
-    
-    items = []
-    for k,v in sorted(d.items(), key=lambda x: x[0]):
-        if extrakeys:
-            items.append((k, groupby(v, extrakeys)))
-        else:
-            items.append((k, v))
-    return tuple(items)
-
-
 def _newshape(initialshape, keys, groupby):
     newshape = list(initialshape)
     for i,s in enumerate(groupby):
@@ -238,15 +200,15 @@ def _newshape(initialshape, keys, groupby):
 def data(iterable, field, groupby=tuple(), reshape=True):
     '''Get the field attribute from all objects, grouping and reshaping if specified
     Args:
-    field   -- Name of a field on the object to get value from
-    groupby -- A list or tuple of fields to group the data with
-    reshape -- (default True) Reshape the data if specified
+        field   -- Name of a field on the object to get value from
+        groupby -- A list or tuple of fields to group the data with
+        reshape -- (default True) Reshape the data if specified
 
     Returns:
-    A numpy array grouped by groupby and reshaped to fit if specified.
-    If reshape is False, then data will be appended on the last
-    dimension (second dimension for 1D data and third for 3D data), 
-    and sorted by the groupby fields.
+        A numpy array grouped by groupby and reshaped to fit if specified.
+        If reshape is False, then data will be appended on the last
+        dimension (second dimension for 1D data and third for 3D data), 
+        and sorted by the groupby fields.
 
     If the data from all the objects in the set do not have the same 
     dimensions then this method will fail. Instead, 
@@ -326,8 +288,9 @@ def _load_cache(filename):
     Returns: A list of dicoms from the objects stored in the pickle object
     '''
     with open(filename, 'r') as f:
+        data = f.read()
         try:
-            cache = pickle.load(f)
+            cache = pickle.loads(data)
         except EOFError:
             raise DicomCacheException('EOF reached while trying to read cache from %s' % filename)
 

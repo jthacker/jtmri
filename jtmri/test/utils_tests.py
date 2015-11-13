@@ -4,7 +4,7 @@ from ..utils import as_iterable, Lazy, AttributeDict, flatten
 
 class TestUtils(unittest.TestCase):
     def test_asiterable(self):
-        assert 'x' == as_iterable('x')
+        assert ['x'] == as_iterable('x')
         assert [1] == list(as_iterable(1))
         assert [1,2,3] == list(as_iterable([1,2,3]))
 

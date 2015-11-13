@@ -1,9 +1,15 @@
-import skimage.draw
-import numpy as np
+# -*- coding: utf-8 -*-
+from collections import namedtuple, defaultdict
 import h5py
-from collections import namedtuple
+import numpy as np
+import os
+from prettytable import PrettyTable
+import skimage.draw
 
-from .utils import unique, rep
+from .utils import unique, rep, path_generator
+
+ROI_FILE_EXT = '.h5'
+
 
 #TODO: Duplicate code from arrview
 
@@ -102,18 +108,22 @@ class SliceTuple(tuple):
         slc[xdim],slc[ydim] = 'x','y'
         return SliceTuple(slc)
 
+    def __repr__(self):
+        return 'SliceTuple({})'.format(', '.join(map(repr, self)))
+
 
 def create_mask(shape, slc, poly, collapse=False):
-    '''Convert the polygons to a binary mask according the specified array shape
+    """Convert a polygon to a binary mask according the specified array shape
     Args:
-    shape    -- a tuple with the size of each dimension in the mask
-    slc      -- SliceTuple describing where to apply the polygon to
-    poly     -- A numpy array of (x,y) point pairs describing a polygon
-    collapse -- Ignore any dimensions > the number of dimensions in shape (i.e. len(shape))
+        shape    -- a tuple with the size of each dimension in the mask
+        slc      -- SliceTuple describing where to apply the polygon to
+        poly     -- A numpy array of (x,y) point pairs describing a polygon
+        collapse -- Ignore any dimensions > the number of dimensions in shape (i.e. len(shape))
+
     Returns:
-    binary mask with the region in poly set to False and everywhere else
-    set to True
-    '''
+        binary mask with the region in poly set to False and everywhere else
+        set to True
+    """
     mask = np.zeros(shape, dtype=bool)
     if len(poly) > 0:
         viewShape = shape[slc.ydim],shape[slc.xdim]
@@ -126,26 +136,49 @@ def create_mask(shape, slc, poly, collapse=False):
 
 
 class ROI(object):
-    def __init__(self, name, poly, slc, tag=None):
+    def __init__(self, name, poly, slc, props=None):
         self.name = name
         self.poly = poly
         self.slc = slc
-        self.tag = tag
+        self.props = props or {}
 
     def to_mask(self, shape, collapse=False):
+        """Create a mask from an ROI object.
+        Args:
+            shape    -- shape of output mask
+            collapse -- (default:False) collapse the ROI to fit in mask
+        """
         return create_mask(shape, self.slc, self.poly, collapse)
-
+    
     def __repr__(self):
-        return 'ROI(name=%r, slc=%r, tag=%r, ...)' % (self.name, self.slc, self.tag)
+        return '<ROI name:{!r} slc:{!r} props:{!r} ...>'.format(self.name, self.slc, self.props)
+
 
 
 class ROISet(object):
     def __init__(self, rois):
         self.rois = rois
 
+    def filter(self, func):
+        """Filter ROIs by a unary predicate func
+        Args:
+            func -- unary predicate
+        Return: ROISet containing ROIs that evaluted to true when passed to the predicate
+        """
+        return ROISet(filter(func, self.rois))
+
     def by_name(self, *names):
-        '''Filter ROIs by names'''
-        return ROISet(filter(lambda r: r.name in names, self.rois))
+        """Filter ROIs by names"""
+        return self.filter(lambda r: r.name in names)
+
+    def by_property(self, name, value):
+        """File ROIs by property
+        Args:
+            name  -- name of property
+            value -- value of property
+        Return: ROISet of ROIs with matching properties
+        """
+        return self.filter(lambda r: (name in r.props) and (r.props[name] == value))
 
     def to_mask(self, shape, collapse=False):
         '''Create a mask from the ROIs'''
@@ -159,6 +192,48 @@ class ROISet(object):
     def to_masked_dict(self, array, collapse=False):
         '''Returns a dict mapping roi names to masked numpy arrays'''
         return {name:self.by_name(name).to_masked(array, collapse) for name in self.names}
+
+    def common_prop_names(self):
+        """return an iterable of property names that are common to all rois"""
+        names = []
+        if len(self.rois) > 0:
+            names = set(self.rois[0].props.keys())
+        for roi in self.rois:
+            names = names.intersection(set(roi.props.keys()))
+        return names
+
+    def disp(self):
+        """Print a pretty display summarizing the ROISet"""
+
+        def _prop_str(dic):
+            """return a compact and pretty string representation of a dict"""
+            keys = sorted(dic.keys())
+            return ' '.join('{}:{!r}'.format(k, dic[k]) for k in keys)
+
+        # Column name, value function pairs
+        columns = [
+            ('name',  lambda roi: roi.name),
+            ('slice', lambda roi: roi.slc)]
+        
+        common_prop_names = self.common_prop_names()
+
+        columns += [
+            (name, lambda roi, name=name: roi.props[name])
+            for name in common_prop_names]
+
+        extra_props_filter = lambda props: {k:v for k,v in props.iteritems() if k not in common_prop_names}
+        extra_props = {roi:_prop_str(extra_props_filter(roi.props)) for roi in self.rois}
+        if any(extra_props.values()):
+            columns += [('props', lambda roi: extra_props[roi])]
+
+        if self.count > 0:
+            t = PrettyTable([name for name, _ in columns])
+            t.align = 'l'
+            for roi in self.rois:
+                t.add_row([func(roi) for _, func in columns])
+            print(str(t) + '\n')
+        else:
+            print('ROISet is empty')
 
     @property
     def names(self):
@@ -178,26 +253,27 @@ class ROISet(object):
         return iter(self.rois)
 
 
-def load(filename, tag=None):
+def load(filename, extra_props=None):
+    """Load a single ROI file"""
+    extra_props = extra_props or {}
     rois = []
     with h5py.File(filename, 'r') as f:
         for roigrp in f['/rois'].itervalues():
             viewdims = roigrp.attrs['viewdims']
             arrslc = roigrp.attrs['arrslc']
+            props = extra_props.copy()
+            props.update(dict(
+                abspath=os.path.abspath(filename)
+            ))
             rois.append(
                 ROI(name=roigrp.attrs['name'],
                     poly=roigrp['poly'].value,
                     slc=SliceTuple.from_arrayslice(arrslc, viewdims),
-                    tag=tag))
+                    props=props))
     return ROISet(rois)
 
 
-def _filter_viewdims(slc):
-    viewdims = slc.viewdims
-    return [0 if d in viewdims else v for d,v in enumerate(slc)] 
-
-
-def save(rois, filename):
+def store(rois, filename):
     """ Save ROIs to the file specified by filename
     Args:
       rois     -- should be an iterable of rois
@@ -205,6 +281,10 @@ def save(rois, filename):
 
     Returns: None
     """
+    def _filter_viewdims(slc):
+        viewdims = slc.viewdims
+        return [0 if d in viewdims else v for d,v in enumerate(slc)] 
+
     with h5py.File(filename, 'w') as f:
         root = f.create_group('rois')
         for i,roi in enumerate(rois):
@@ -215,3 +295,44 @@ def save(rois, filename):
             roigrp.attrs['viewdims'] = roi.slc.viewdims
             roigrp.attrs['arrslc'] = _filter_viewdims(roi.slc)
             roigrp['poly'] = roi.poly
+
+
+def read(paths, basepath=None, recursive=True):
+    """Load all ROI files found in path
+    If a directory is given, then ROIs loaded from different files
+    are given a path property that is the relative path from the root path
+
+    Given a directory structure as follows:
+    >>> tree .
+    ./rois/
+    ├── rois0.h5
+    ├── sub0
+    │   ├── rois1.h5
+    │   └── rois2.h5
+    └── sub1
+        ├── rois2.h5
+        └── rois3.h5
+    
+    Reading this directory (i.e. read('rois')) will consume the six ROI files.
+    """
+    rois = []
+    for path in filter(lambda p: os.path.splitext(p)[1] == ROI_FILE_EXT, path_generator(paths, recursive)):
+        if basepath:
+            props = { 'relpath': os.path.relpath(basepath, path) }
+        else:
+            props = {}
+        rois.extend(load(path, props))
+    return ROISet(rois)
+
+
+def save(rois):
+    """Save an ROIset to the respective paths
+    ROIs in the set must have a 'path' property otherwise they cannot be saved using this method, use store instead.
+    """
+    roi_files = defaultdict(list)
+    for roi in rois:
+        if 'abspath' not in roi.props:
+            raise Exception('Unable to save rois, each roi must have an "abspath" property. Failing roi: {!r}'.format(roi))
+        roi_files[roi.props['abspath']].append(roi)
+    for path, rois in roi_files.iteritems():
+        store(rois, path)
