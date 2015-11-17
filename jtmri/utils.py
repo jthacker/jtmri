@@ -3,7 +3,8 @@ import copy
 from glob import iglob
 import itertools
 import logging
-import numpy as np 
+import numpy as np
+import pandas as pd
 import os
 
 log = logging.getLogger(__name__)
@@ -86,6 +87,7 @@ class Lazy(object):
         self._func = func
 
     def __call__(self, *args, **kwargs):
+        log.debug('Lazy class called {!r}'.format(self))
         return self._func(*args, **kwargs)
 
 
@@ -113,6 +115,12 @@ class AttributeDict(collections.MutableMapping):
             val = val()
             self.__setitem__(key, val)
         return val
+
+    # Contains is implemented here (as opposed to using the mixim from MutableMapping),
+    # because the default implementation calls __getitem__ and this will auto load Lazy
+    # classes. So a version of __contains__ is implemented here that just checks the _store
+    def __contains__(self, key):
+        return key in self._store
 
     def __setitem__(self, key, val):
         self._store[key] = val
@@ -161,17 +169,17 @@ def as_iterable(val):
     return val if is_sequence(val) else [val]
 
 
-def rep(self, props):
+def rep(self, attrs):
     '''Create a repr of a property based class quickly
     Args:
-    self  -- pass the self reference for the class here
-    props -- list of properties to add to the representation
+        self  -- pass the self reference for the class here
+        attrs -- list of attributes to add to the representation
 
     Returns:
     A string representing the class
     '''
     s = self.__class__.__name__
-    s += '(%s)' % ','.join(['%s=%r' % (prop,getattr(obj,prop)) for prop in props])
+    s += '(%s)' % ','.join(['%s=%r' % (attr, getattr(obj, attr)) for attr in attrs])
     return s
 
 
@@ -226,13 +234,7 @@ class ListAttrAccessor(object):
     def __getattr__(self, attr):
         vals = []
         for obj in self._item_list:
-            try:
-                val = getattr(obj, attr)
-            except AttributeError:
-                try:
-                    val = obj[attr]
-                except (TypeError, KeyError):
-                    val = None
+            val = getattr(obj, attr)
             vals.append(val)
         if self._unique:
             vals = unique(vals)
@@ -339,7 +341,39 @@ class OrderedDefaultDict(collections.OrderedDict):
         return self.__class__, args, None, None, self.iteritems()
 
 
+def getattr_nested(obj, attrs):
+    """Support getting nested attributes
+    Args:
+        obj   -- object to get attributes from
+        attrs -- attribute accessor string
+                 This should be a dot separated list of attributes to access,
+                 just like when typeing the code out
+
+    Examples
+    >>> A = namedtuple('A', 'x,y')
+    >>> a = A(A(1, 2), A(3, 4))
+    >>> getattr_nested(a, 'x.x')
+    1
+    >>> getattr_nested(a, 'y.x')
+    3
+    """
+    for attr in attrs.split('.'):
+        obj = getattr(obj, attr)
+    return obj
+
+
 class Grouped(collections.Mapping):
+    """A grouped object is created from a dictionary whose keys are tuples and values
+    are iterables
+
+    Keys can be accessed sequentially.
+    >>> g = Grouped({(0,1):['a','b'], (0,2):['a,'c']})
+    >>> g[0][1]
+    ['a', 'b']
+    >>> g[0,1]
+    ['a', 'b']
+    """
+
     def __init__(self, dic, _keylen=None):
         self._dic = collections.OrderedDict(dic)
         self._keylen = _keylen or len(self._dic.iterkeys().next())
@@ -354,9 +388,31 @@ class Grouped(collections.Mapping):
         key = tuple(as_iterable(key))
         keylen = len(key)
         if keylen < self._keylen:
-            return Grouped(collections.OrderedDict((k[keylen:], v) for k, v in self._dic.iteritems() if k[:keylen] == key),
+            return Grouped(((k[keylen:], v) for k, v in self._dic.iteritems() if k[:keylen] == key),
                            self._keylen - keylen)
         return self._dic[key]
+
+    def apply(self, applier):
+        """Apply a function to each value and return a Grouped object
+        Args:
+            applier -- a func or a list of funcs or a iterable of name, func pairs
+                       func can also be a string for attribute access
+        """
+        def func(v, applier=applier):
+            vals = []
+            for f in as_iterable(applier):
+                try:
+                    key, f = f
+                    vals.append((key, f(v)))
+                except (TypeError, ValueError):
+                    if callable(f):
+                        vals.append(f(v))
+                    else:
+                        vals.append(getattr_nested(v, f))
+            if len(vals) == 1:
+                return vals[0]
+            return vals
+        return Grouped(((k, func(v)) for k, v in self._dic.iteritems()), self._keylen)
         
 
 
@@ -411,7 +467,7 @@ def groupby(iterable, grouper=lambda x: x, group_type=list):
         if callable(f):
             keyfuncs.append(f)
         elif isinstance(f, basestring):
-            keyfuncs.append(lambda x, f=f: getattr(x, f))
+            keyfuncs.append(lambda x, f=f: getattr_nested(x, f))
         else:
             raise TypeError('{!r} of type {!r} cannot be used in a grouper'.format(f, type(f)))
     out = OrderedDefaultDict(list)

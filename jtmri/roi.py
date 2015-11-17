@@ -6,7 +6,7 @@ import os
 from prettytable import PrettyTable
 import skimage.draw
 
-from .utils import unique, rep, path_generator
+from .utils import unique, rep, path_generator, groupby, AttributeDict
 
 ROI_FILE_EXT = '.h5'
 
@@ -140,7 +140,15 @@ class ROI(object):
         self.name = name
         self.poly = poly
         self.slc = slc
-        self.props = props or {}
+        self.props = AttributeDict(props or {})
+
+    @property
+    def tag(self):
+        """Used by dicom viewer for distinguishing user ROIs
+        TODO: Find a better way to handle this use case
+        """
+        reldir = self.props['reldir']
+        return reldir or '/'
 
     def to_mask(self, shape, collapse=False):
         """Create a mask from an ROI object.
@@ -167,6 +175,10 @@ class ROISet(object):
         """
         return ROISet(filter(func, self.rois))
 
+    @property
+    def first(self):
+        return self.rois[0]
+
     def by_name(self, *names):
         """Filter ROIs by names"""
         return self.filter(lambda r: r.name in names)
@@ -179,6 +191,13 @@ class ROISet(object):
         Return: ROISet of ROIs with matching properties
         """
         return self.filter(lambda r: (name in r.props) and (r.props[name] == value))
+
+    def by_tag(self, tag):
+        """Used by dicom viewer for distinguishing user ROIs"""
+        return self.filter(lambda r: r.tag == tag)
+    
+    def groupby(self, grouper):
+        return groupby(self, grouper, group_type=ROISet)
 
     def to_mask(self, shape, collapse=False):
         '''Create a mask from the ROIs'''
@@ -318,7 +337,7 @@ def read(paths, basepath=None, recursive=True):
     rois = []
     for path in filter(lambda p: os.path.splitext(p)[1] == ROI_FILE_EXT, path_generator(paths, recursive)):
         if basepath:
-            props = { 'relpath': os.path.relpath(basepath, path) }
+            props = { 'reldir': os.path.dirname(os.path.relpath(path, basepath)) }
         else:
             props = {}
         rois.extend(load(path, props))

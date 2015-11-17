@@ -15,7 +15,7 @@ import arrow
 from .siemens import SiemensProtocol
 from ..progress_meter import progress_meter_ctx
 from ..utils import (unique, AttributeDict, ListAttrAccessor, Lazy,
-                     is_sequence, path_generator, groupby)
+                     is_sequence, path_generator, groupby, Grouped)
 from . import dcminfo
 
 
@@ -156,11 +156,28 @@ class DicomSet(object):
         """Copy dicom files to dest directory"""
         return dcm_copy(self, dest)
 
-    def rois(self, data_groupby=tuple(), roi_groupby=tuple()):
+    def rois(self, data_groupby=tuple(), roi_groupby=tuple(), collapse=True):
         """Apply ROIs to the data defined by the groupby
         Args:
             data_groupby -- Group data by key (see groupby).
+            roi_groupby  -- Group rois by with this
+            collapse     -- (default: True) Collapse ROI dimensions to fit data
+
+        ROIs are read from each dicom series meta.roi attribute and
+        are assumed to be the same for all dicoms in the series.
+        Data is loaded by the series and grouped according to data_groupby.
+        The ROIs for that series are then applied to that data block
         """
+        out = {}
+        for series in self.series():
+            dcm = series.first
+            if 'roi' not in dcm.meta:
+                continue
+            data = series.data(data_groupby)
+            for key, roiset in dcm.meta.roi.groupby(roi_groupby).iteritems():
+                out[(series.first.SeriesNumber,) + key] = roiset.to_masked(data, collapse)
+        return Grouped(out)
+                
     
     @property
     def count(self):
@@ -463,7 +480,7 @@ def disp(dicomset, extra_columns=tuple()):
             + list(extra_columns) \
             + [('Count', lambda s: s.count),
                ('Seq', lambda s: s.first.meta.get('sequence') or ''),
-               ('ROI', lambda s: '*' if s.first.meta.get('roi') else '')]
+               ('ROI', lambda s: '*' if 'roi' in s.first.meta else '')]
     
     if dicomset.count > 0:
         for study in dicomset.studies():

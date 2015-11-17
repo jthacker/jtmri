@@ -244,6 +244,7 @@ class ROIReader(object):
                 if m:
                     series_number = int(m.group(1))
                     path = os.path.abspath(os.path.join(dirpath, filename))
+                    series_files[series_number].append(path)
         self._paths[rois_dir] = series_files
         return series_files
     
@@ -251,18 +252,25 @@ class ROIReader(object):
     def __call__(self, roidir, series_number):
         """Find all rois for the given series_number under the rois directory
         """
+        roidir = os.path.abspath(roidir)
         # TODO: This method should be converted to using the new ROI props method
-        roi_files = []
-        paths = self._get_paths(roidir).get(series_number, [])
-        return Lazy(lambda paths=paths, roidir=roidir: read_roi(paths, roidir))
+        paths = self._get_paths(roidir).get(series_number)
+        if paths:
+            return Lazy(lambda paths=paths, roidir=roidir: read_roi(paths, roidir))
+        return None
 
 
 def update_metadata_rois(dcms):
-    '''Reread rois from disk'''
+    """Reread rois from disk
+    Looks for ROIs in a directory called 'roi' in the same directory as the dicom file.
+    ROIs are lazily loaded so this should have minimal impact on performance.
+    """
     roi_reader = ROIReader()
     for dcm in dcms:
         rois_dir = os.path.join(os.path.dirname(dcm['filename']), 'rois')
-        dcm.meta['roi'] = roi_reader(rois_dir, dcm.SeriesNumber)
+        rois = roi_reader(rois_dir, dcm.SeriesNumber)
+        if rois:
+            dcm.meta['roi'] = rois
 
 
 def update_metadata(study_infos, dcms):

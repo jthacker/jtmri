@@ -1,5 +1,7 @@
+from collections import namedtuple
 import unittest
-from ..utils import as_iterable, Lazy, AttributeDict, flatten
+
+from ..utils import as_iterable, Lazy, AttributeDict, flatten, getattr_nested
 
 
 class TestUtils(unittest.TestCase):
@@ -58,3 +60,13 @@ class TestUtils(unittest.TestCase):
 
     def test_flatten(self):
         self.assertEqual([1,2,3,4,5], list(flatten([1, [2, 3], [4], 5])))
+
+
+    def test_getattr_nested(self):
+        P = namedtuple('P', 'x,y')
+        p = P(P(1, 2), P(3, P(4, 5)))
+        self.assertEqual(getattr_nested(p, 'x'), P(1, 2))
+        self.assertEqual(getattr_nested(p, 'x.x'), 1)
+        self.assertEqual(getattr_nested(p, 'y.x'), 3)
+        self.assertEqual(getattr_nested(p, 'y.y.y'), 5)
+
