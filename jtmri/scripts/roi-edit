@@ -53,10 +53,13 @@ if __name__ == '__main__':
     for f in args.files:
         print('Editing rois in %s' % f)
         rois = jtmri.roi.load(f)
+
+        edited = False
         for roi in rois:
             slc = list(roi.slc)
             # Edit all dimensions from cli args
             for dim, val in args.dim:
+                edited = True
                 # Cannot edit a view dimension
                 if dim in roi.slc.viewdims:
                     raise Exception("cannot edit dimension {} because it is a view dimension, file:{}, roi:{}"\
@@ -87,9 +90,13 @@ if __name__ == '__main__':
                 edits.append('name: {}'.format(roi.name))
             print('  '.join(edits)) 
 
+            edited = (roi.slc != slc) or (roi.name != name)
             roi.slc = slc
             roi.name = name
-        if not args.pretend:
+
+        if not args.pretend and edited:
             jtmri.roi.store(rois, f)
             print('Saving rois to %s' % f)
+        else:
+            print('ROIs unchanged, skipping file %s' % f)
         print
