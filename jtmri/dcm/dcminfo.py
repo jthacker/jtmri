@@ -23,7 +23,7 @@ def _update_meta(meta_new, meta_old):
     If the key in meta_old is a list, then the values in
     meta_old for that key are appended to meta_old[key].
     '''
-    for key,val_new in meta_new.items():
+    for key, val_new in meta_new.items():
         if key in meta_old:
             val_old = meta_old[key]
             if isinstance(val_old, list):
@@ -158,6 +158,8 @@ class ASL(object):
         meta.sequence = 'asl'
         meta.inv_delay = int(dcm.Siemens.MrPhoenixProtocol['sWipMemBlock']['alFree']['1']) / 1000.
         meta.m0 = study_dcms.by_series(old_meta.m0)
+        meta.pwi = lambda study_dcms=study_dcms, asl=asl, series_num=dcm.SeriesNumber: \
+                asl.pwi(study_dcms.by_series(series_num).data('SliceLocation'))
         def fit_rbf(subject, m0, dcm=dcm, study_dcms=study_dcms, meta=meta):
             """Find the renal blood flow map
             Args:
@@ -165,12 +167,10 @@ class ASL(object):
             """
             subject = subject.lower()
             assert subject in asl.rbf_params.keys()
-            data = study_dcms.by_series(dcm.SeriesNumber).data('SliceLocation')
-            pwi = asl.pwi(data)
-            return asl.rbf(pwi, m0, meta.inv_delay, asl.rbf_params[subject]) 
+            return asl.rbf(meta.pwi(), m0, meta.inv_delay, asl.rbf_params[subject])
         meta.rbf_offline = fit_rbf
         return meta
-_register_seq('asl', ASL) 
+_register_seq('asl', ASL)
 
 
 class ASLNAV(object):
