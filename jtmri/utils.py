@@ -98,7 +98,7 @@ class AttributeDict(collections.MutableMapping):
     # attribute when __getattr__ is called. __getattr__ requests the _store
     # attribute and since this does not exist, __getattr__ will be called again
     # to resolve the missing attribute, leading to an infinite recursion.
-    _store = {}  
+    _store = {}
 
     # collection.MutableMapping requires:
     # __delitem__, __setitem__, __getitem__, __iter__, __len__
@@ -116,7 +116,7 @@ class AttributeDict(collections.MutableMapping):
             self.__setitem__(key, val)
         return val
 
-    # Contains is implemented here (as opposed to using the mixim from MutableMapping),
+    # Contains is implemented here (as opposed to using the mixin from MutableMapping),
     # because the default implementation calls __getitem__ and this will auto load Lazy
     # classes. So a version of __contains__ is implemented here that just checks the _store
     def __contains__(self, key):
@@ -151,7 +151,7 @@ class AttributeDict(collections.MutableMapping):
 
     def dict(self):
         return copy.deepcopy(self._store)
-  
+
     def __repr__(self):
         return 'AttributeDict(' + repr(self._store) + ')'
 
@@ -161,7 +161,7 @@ class DefaultAttributeDict(AttributeDict):
     when keys are missing'''
     def __init__(self, *args, **kwargs):
         self.__dict__['_store'] = collections.defaultdict(DefaultAttributeDict, dict(*args, **kwargs))
-        
+
 
 def as_iterable(val):
     '''If val is not iterable then return it wrapped in a list,

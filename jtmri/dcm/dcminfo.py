@@ -160,13 +160,15 @@ class ASL(object):
         meta.m0 = study_dcms.by_series(old_meta.m0)
         meta.pwi = lambda study_dcms=study_dcms, asl=asl, series_num=dcm.SeriesNumber: \
                 asl.pwi(study_dcms.by_series(series_num).data('SliceLocation'))
-        def fit_rbf(subject, m0, dcm=dcm, study_dcms=study_dcms, meta=meta):
+        def fit_rbf(subject, m0=None, dcm=dcm, study_dcms=study_dcms, meta=meta):
             """Find the renal blood flow map
             Args:
-              subject -- either 'human' or 'rat'
+                subject -- either 'human' or 'rat'
             """
             subject = subject.lower()
             assert subject in asl.rbf_params.keys()
+            if m0 is None:
+                m0 = meta.m0.data('SliceLocation').mean(axis=-1)
             return asl.rbf(meta.pwi(), m0, meta.inv_delay, asl.rbf_params[subject])
         meta.rbf_offline = fit_rbf
         return meta
