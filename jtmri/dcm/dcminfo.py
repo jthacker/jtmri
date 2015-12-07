@@ -183,7 +183,8 @@ class ASLNAV(object):
     def create_metadata(dcm, study_dcms, old_meta):
         meta = AttributeDict({})
         meta.sequence = 'asl-nav'
-        meta.inv_delay = int(dcm.Siemens.MrPhoenixProtocol['sWipMemBlock']['alFree']['1']) / 1000.
+        # TODO: Some CKD-LONG scans do not seem to have this parameter (e.g. RH217, VW405)
+        #meta.inv_delay = int(dcm.Siemens.MrPhoenixProtocol['sWipMemBlock']['alFree']['1']) / 1000.
         return meta
 _register_seq('asl-nav', ASLNAV) 
 
