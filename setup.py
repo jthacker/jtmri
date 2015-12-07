@@ -16,5 +16,6 @@ setup(
             'pydicom',
             'fuzzywuzzy',
             'jinja2',
-            'arrow']
+            'arrow',
+            'pandas']
 )
