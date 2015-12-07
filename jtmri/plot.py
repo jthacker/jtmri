@@ -148,16 +148,21 @@ def density(arr, samples=1000, plt_kwds=dict(), ax=None):
     ax.set_ylabel('Density')
 
 
-def imshow(img, imshow_args={}, title='', label='', ax=None):
-    '''Wrapper around matplotlib.imshow but with better defaults'''
+def imshow(img, imshow_args={}, label='', ax=None):
+    """Wrapper around matplotlib. imshow but with better defaults
+    If img has more than 2 dimensions, then it is shown as a mosaic 
+    """
     if ax is None:
-        fig,ax = pl.subplots()
+        fig, ax = pl.subplots()
+    if np.ma.is_masked(img):
+        img = img.copy()
+        img[img.mask] = np.nan
     if img.ndim > 2:
         img = jtmri.np.mosaic(img)
     cax = ax.imshow(img, **imshow_args)
     ax.axis('off')
     cb = pl.colorbar(cax, label=label)
-    return ax,cb
+    return ax, cb
 
 
 def label_bars(bbox0, bbox1, text, y_offset=None, y_text_offset=None, ax=None):
