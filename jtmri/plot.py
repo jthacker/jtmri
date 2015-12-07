@@ -165,6 +165,19 @@ def imshow(img, imshow_args={}, label='', ax=None):
     return ax, cb
 
 
+def imshow_checkerboard(img_a, img_b, cell_len=10, imshow_a_args={}, imshow_b_args={}, ax=None):
+    """Display two images by checkerboarding them on top of each other
+    Args:
+        img_a    -- image A (bottom image)
+        img_b    -- image B (top image)
+        cell_len -- length of checkerboard cell along each dimension
+    """
+    ax, _ = imshow(img_a, imshow_args=imshow_a_args, ax=ax)
+    cb = jtmri.np.checkerboard(img_a.shape, cell_len)
+    img_cb = np.ma.array(img_b, mask=cb)
+    ax.imshow(img_cb, **imshow_b_args)
+
+
 def label_bars(bbox0, bbox1, text, y_offset=None, y_text_offset=None, ax=None):
     """Place a label between two bars
     Useful for indicating significant differences on a bar plot

@@ -217,3 +217,24 @@ def mosaic(a, aspect=16/9., fill=np.nan):
         a = np.concatenate((a, pad_im), 2)
     long_arr = np.vstack(np.rollaxis(a, -1))
     return np.hstack(np.array_split(long_arr, nr))
+
+
+def checkerboard(shape, cell_len):
+    """Create a checkerboard of 0's and 1's
+    Args:
+        shape    -- shape of N dimensional checkerboard
+        cell_len -- length of checkerboard cell along each dimension, either an array with the same
+                    length as shape where each value indicates the length for
+                    the corresponding dimension, or a singular value indicating the
+                    same number length for all dimensions
+    Returns:
+        A checkerboard of 0's and 1's with specified shape and cell length
+    """
+    cell_len = jtmri.utils.as_iterable(cell_len)
+    if len(cell_len) == 1:
+        cell_len = cell_len * len(shape)
+    assert len(cell_len) == len(shape)
+    ts = [np.arange(n) for n in shape]
+    # Index matrix style
+    M = np.meshgrid(*ts, indexing='ij')
+    return sum(m // s for m, s in zip(M, cell_len)) % 2
