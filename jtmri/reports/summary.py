@@ -10,7 +10,7 @@ class ROITable(Table):
         headers = ['Series', 'Observer', 'Name', 'Mean', 'Std', 'Size']
         super(ROITable, self).__init__(title, description, headers)
 
-    def add_ndarray(self, name, data, roi_dict):
+    def add_ndarray(self, name, data, rois):
         '''For each uniquely named roi in roi_set,
         create a new row in the table with columns:
             name, roi_name, mean, std, size
@@ -20,19 +20,17 @@ class ROITable(Table):
             roi_dict -- Dictionary of ROIs
         '''
         def fmt(val):
-            if np.ma.is_masked(val):
-                return 'nan'
-            else:
-                return '{:4.2f}'.format(val)
-        for observer, roi_set in roi_dict.iteritems():
-            for roi_name in roi_set.names:
-                roi = roi_set.by_name(roi_name)
-                masked = roi.to_masked(data, collapse=True)
-                row = (name, observer, roi_name, 
-                       fmt(masked.mean()),
-                       fmt(masked.std()),
-                       (~masked.mask).sum())
-                self.add_row(row)
+            return 'nan' if np.ma.is_masked(val) else '{:4.2f}'.format(val)
+
+        for (observer, roi_name), roiset in rois.groupby(('tag', 'name')).iteritems():
+            masked = roiset.to_masked(data, collapse=True)
+            row = (name,
+                   observer,
+                   roi_name, 
+                   fmt(masked.mean()),
+                   fmt(masked.std()),
+                   (~masked.mask).sum())
+            self.add_row(row)
 
     def add_series(self, name, series):
         '''For each uniquely named roi in roi_set,

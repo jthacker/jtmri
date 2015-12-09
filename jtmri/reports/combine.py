@@ -16,9 +16,9 @@ _r2s_pre_rows = (
 )
 
 _r2s_post_rows = (
-    ('c', 'Post-furosemide) R2* (cortex) (s^-1)', lambda x: '%2.1f' % x),
-    ('m', 'Post-furosemide) R2* (medulla) (s^-1)', lambda x: '%2.1f' % x),
-    ('k', 'Post-furosemide) R2* (kidney) (s^-1)', lambda x: '%2.1f' % x),
+    ('c', 'Post-furosemide R2* (cortex) (s^-1)', lambda x: '%2.1f' % x),
+    ('m', 'Post-furosemide R2* (medulla) (s^-1)', lambda x: '%2.1f' % x),
+    ('k', 'Post-furosemide R2* (kidney) (s^-1)', lambda x: '%2.1f' % x),
 )
 
 
@@ -54,7 +54,7 @@ class CombineForm722Report(Report):
 
     def set_series(self, series_adc, series_r2s_pre, series_r2s_post):
         def add_roi(table, rois, side, region, data, description):
-            rois = rois[self._observer]
+            rois = rois.by_tag(self._observer)
             masked = rois.by_name(side+region).to_masked(data, collapse=True)
             table.add_row((description, fmt(masked.mean())))
 
