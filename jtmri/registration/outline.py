@@ -41,6 +41,22 @@ class RegistrationResult(RegistrationResultBase):
             return np.ma.array(img_warped, mask=mask_warped)
         return img_warped
 
+    def disp(self):
+        """Display a summary of the warp"""
+        single = lambda x: '{:.2f}'.format(x)
+        double = lambda x: '({:.2f}, {:.2f})'.format(*x)
+        props = [
+            ('rotation', single),
+            ('scale', double),
+            ('shear', single),
+            ('translation', double)]
+
+        out = ["Transformation Parameters:"]
+        for prop, fmt in props:
+            val = getattr(self.matrix, prop)
+            out.append("{:>12s} -- {}".format(prop, fmt(val)))
+        print('\n'.join(out))
+
 
 def contours(arr, max_iterations=None, threshold=None, smoothing=2, lambda1=1, lambda2=2):
     assert arr.ndim == 2
