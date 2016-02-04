@@ -479,6 +479,7 @@ def disp(dicomset, extra_columns=tuple()):
     columns = [('#', 'SeriesNumber'), ('Description', 'SeriesDescription')] \
             + list(extra_columns) \
             + [('Count', lambda s: s.count),
+               ('Shape', lambda s: '{}x{}'.format(s.first.Rows, s.first.Columns)),
                ('Seq', lambda s: s.first.meta.get('sequence') or ''),
                ('ROI', lambda s: '*' if 'roi' in s.first.meta else '')]
     
