@@ -11,7 +11,8 @@ from .utils import rep
 from .progress_meter import ProgressMeter
 from .np import apply_along_axis
 
-log = logging.getLogger('jtmri.fitting')
+log = logging.getLogger(__name__)
+
 
 def _minValueFailedFitFunc(initialGuess):
     size = len(initialGuess)
@@ -19,6 +20,28 @@ def _minValueFailedFitFunc(initialGuess):
     pcov = np.zeros((size,size))
     pcov[np.diag_indices_from(pcov)] = np.inf
     return popt,pcov
+
+
+def siemens_t2star_to_r2star(t2star):
+    """Mimics Siemens scanner inversion of t2star to r2star.
+    Does not provide the correct value for a small segment of the colormap though.
+
+    Parameters
+    ----------
+    t2star : ndarray
+        T2* map that has been loaded from a siemens dicom file. This map is expected
+        to have 16 bit values for T2*.
+
+    Returns
+    -------
+    The result is an inverted T2* map (R2*) that is the same as if it had been done on the scanner.
+    The values are not correct in general, as they are just attempting to match what the scanner does.
+    """
+    r2star = 1000.0 / t2star
+    r2star[t2star == 0] = 0
+    r2star[t2star == 1] = 1
+    return r2star.astype(int)
+
 
 Fit = namedtuple('Fit', 'x y params paramdict func covmat success')
 
