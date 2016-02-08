@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 import re
 
-import jtmri.roi
-
 from terseparse import Arg, Parser, types
 
 
@@ -84,6 +82,8 @@ if __name__ == '__main__':
         print('Pretending, file saving is disabled')
 
     renamer = Renamer(args.ns.rename)
+
+    import jtmri.roi
 
     for f in args.ns.files:
         print('Editing rois in %s' % f)
