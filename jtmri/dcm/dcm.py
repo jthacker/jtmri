@@ -15,11 +15,11 @@ import arrow
 from .siemens import SiemensProtocol
 from ..progress_meter import progress_meter_ctx
 from ..utils import (unique, AttributeDict, ListAttrAccessor, Lazy,
-                     is_sequence, path_generator, groupby, Grouped)
+                     is_sequence, path_generator, groupby, Grouped, filter_error)
 from . import dcminfo
 
 
-log = logging.getLogger('jtmri:dicom')
+log = logging.getLogger(__name__)
 
 
 CACHE_FILE_NAME = '.cache'
@@ -143,8 +143,8 @@ class DicomSet(object):
         for sid in unique(self.all.StudyInstanceUID):
             yield self.filter(lambda d: d.StudyInstanceUID == sid)
 
-    def disp(self, extra_columns=tuple()):
-        disp(self, extra_columns)
+    def disp(self, extra_columns=tuple(), show_meta=True):
+        disp(self, extra_columns, show_meta)
 
     def view(self, groupby=tuple(), roi_filename=None, roi_tag=None):
         return view(self, groupby, roi_filename, roi_tag)
@@ -468,7 +468,7 @@ def _column_value(col, series):
             return series.first.get(val)
     return series.first.get(col)
 
-def disp(dicomset, extra_columns=tuple()):
+def disp(dicomset, extra_columns=tuple(), show_meta=True):
     '''Display an iterable of dicoms, removing redundant information
     Args:
     dicomset      -- dicomset
@@ -479,7 +479,9 @@ def disp(dicomset, extra_columns=tuple()):
     columns = [('#', 'SeriesNumber'), ('Description', 'SeriesDescription')] \
             + list(extra_columns) \
             + [('Count', lambda s: s.count),
-               ('Shape', lambda s: '{}x{}'.format(s.first.Rows, s.first.Columns)),
+               ('Shape', filter_error(lambda s: '{}x{}'.format(s.first.Rows, s.first.Columns),
+                                      catch=AttributeError,
+                                      retval='?')),
                ('Seq', lambda s: s.first.meta.get('sequence') or ''),
                ('ROI', lambda s: '*' if 'roi' in s.first.meta else '')]
     
@@ -489,7 +491,7 @@ def disp(dicomset, extra_columns=tuple()):
             print('Patient: %r' % st.PatientName)
             print('StudyID: %r' % st.StudyID)
             print('StudyInstanceUID: %r' % st.StudyInstanceUID)
-            if hasattr(st, 'meta'):
+            if show_meta and hasattr(st, 'meta'):
                 print('Meta: %r' % st.meta.dict())
            
             t = PrettyTable([_column_name(col) for col in columns])
