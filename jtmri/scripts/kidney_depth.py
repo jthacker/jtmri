@@ -1,18 +1,25 @@
 import numpy as np
 
 def distance_from_region(label_mask, distance_mask=None, scale=1, ord=2):
-    '''Find the distance at every point in an image from a set of labeled points.
-    Args:
-    label_mask    -- A mask designating the points to find the distance from. A True value
-                     indicates that the pixel is in the region, a False value indicates it is not.
-    distance_mask -- A mask inidicating which regions to calculate the distance in
-    scale         -- Scale the calculated distance to another distance measure (eg. to millimeters)
-    ord           -- Order of norm to use when calculating distance. See np.linalg.norm for more details
+    """Find the distance at every point in an image from a set of labeled points.
+    Parameters
+    ==========
+    label_mask : ndarray
+        A mask designating the points to find the distance from. A True value
+        indicates that the pixel is in the region, a False value indicates it is not.
+    distance_mask : ndarray
+        A mask inidicating which regions to calculate the distance in
+    scale : int
+        Scale the calculated distance to another distance measure (eg. to millimeters)
+    ord : int
+        Order of norm to use when calculating distance. See np.linalg.norm for more details
 
-    Returns:
-    A masked array of the same size as label_mask. If distance_mask is passed in then the output array
-    is masked by it.
-    '''
+    Returns
+    =======
+    distances : ndarray
+        A masked array of the same size as label_mask.
+        If distance_mask is passed in then the output array is masked by it.
+    """
     if distance_mask is None:
         distance_mask = np.ones(label_mask.shape, dtype=bool)
     assert label_mask.shape == distance_mask.shape

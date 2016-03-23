@@ -1,5 +1,5 @@
 from .builder import Images, Report, Section, Table
-from ..np import flatten_axes, iter_axis
+from ..np import flatten_axes, iter_axes
 from ..fit import fit_r2star_with_threshold
 import numpy as np
 
@@ -72,7 +72,7 @@ class DicomStudySummaryReport(Report):
         '''
         images = Images(title, description, [data.min(), data.max()])
         arrs = flatten_axes(data, range(2, data.ndim))
-        for arr in iter_axis(arrs, 2):
+        for arr in iter_axes(arrs, 2):
             images.add_image(arr)
         self.add_section(images)
 

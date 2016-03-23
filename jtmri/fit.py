@@ -183,6 +183,7 @@ def fit_r2star_fast(t, arr, axis=-1):
 
     Returns:
     An N-1 dimensional array of R2* fits.
+    An N-1 dimensional array of residuals.
     '''
     arr_dims = range(arr.ndim)
     axis = arr_dims[axis]
@@ -194,12 +195,14 @@ def fit_r2star_fast(t, arr, axis=-1):
     A = np.c_[-1*t, np.ones_like(t)]
     b = np.log(arr.swapaxes(axis, -1).reshape((-1, len(t)))).T
     b[np.isinf(b)] = 0
-    fits,residuals,rank,singvals = np.linalg.lstsq(A, b)
+    fits, residuals, rank, singvals = np.linalg.lstsq(A, b)
     r2star = fits[0].reshape(out_shape)
+    residuals = residuals.reshape(out_shape)
 
     if np.ma.isMaskedArray(arr):
         r2star = np.ma.array(r2star, mask=np.ma.getmaskarray(arr).all(axis=-1))
-    return r2star
+        residuals = np.ma.array(residuals, mask=np.ma.getmaskarray(arr).all(axis=-1))
+    return r2star, residuals
 
 
 def fit_r2star_with_threshold(t, data, min_threshold=20):

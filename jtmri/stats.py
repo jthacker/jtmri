@@ -6,7 +6,7 @@ from collections import namedtuple
 import logging
 
 
-log = logging.getLogger('jtmri.stats')
+log = logging.getLogger(__name__)
 
 
 def cohens_d(a, b):
@@ -79,6 +79,82 @@ def tests(data, groups, tests, stat, adj=None):
     df = df.sortlevel()
     return df
 
+
+def test_grid(data, test_groups, data_columns, statistic, column_groups=None, adjust=False):
+    """Generate a table of test statistics.
+    Parameters
+    ----------
+    data : DataFrame
+        Pandas dataframe to perform tests on
+    test_groups : 
+        An iterable where each item contains: column name, filter function
+        The number of test columns will depend on the statistic being computed.
+        For a T-test, it should be two, since only two groups of data are being
+        compared.
+    data_columns : list of column names
+        A list of column names to perform each the test on
+    statistic : function that returns p value
+        Statistic to compute
+    column_groups : Iterable of column names (default: None)
+        Column names to group on before performing the tests
+    adjust : bool (default: False)
+        Perform groupwise adjustment of p-values for each of the column groups
+
+    Returns
+    -------
+    DataFrame
+    """
+    summary_stats = (
+        ('mean', lambda arr: arr.mean()),
+        ('std', lambda arr: arr.std()))
+
+    out = []
+    col_names = ['test']
+    if column_groups is not None:
+        col_names += list(column_groups)
+    for name, _ in test_groups:
+        col_names += ['{}({})'.format(stat_name, name) for stat_name, _ in summary_stats]
+    for name, _ in test_groups:
+        col_names += ['N({})'.format(name)]
+    col_names += ['p', 'sig', 'd']
+
+    groups = True
+    if column_groups is None:
+        groups = False
+        column_groups = lambda x: 0
+        column_group_names = []
+
+    for key, grp_idx in data.groupby(column_groups).groups.items():
+        df = data.ix[grp_idx]
+        test_dfs = [f(df) for _, f in test_groups]
+        for data_col in data_columns:
+            test_arrays = [tdf[data_col] for tdf in test_dfs]
+            _, p = statistic(*test_arrays)
+            row = [data_col]
+            if groups:
+                row += list(key)
+            # Compute summary statistics
+            for arr in test_arrays:
+                row += [func(arr) for _, func in summary_stats]
+            for arr in test_arrays:
+                row += [len(arr)]
+            row += [p, sig(p), cohens_d(*test_arrays)]
+            out.append(row)
+            
+    df = pd.DataFrame(out, columns=col_names)
+    if adjust:
+        df['padj'] = np.NaN * np.ones(len(df))
+        for _, grp_idx in df.groupby(column_groups).groups.items():
+            padj = fwer_sequential_adjust(df.ix[grp_idx])
+            df.loc[padj.index, 'padj'] = padj
+        df['sig_adj'] = df['padj'].apply(sig)
+   
+    idx_cols = ['test']
+    if groups:
+        idx_cols += list(column_groups)
+    df = df.set_index(idx_cols)
+    df = df.sortlevel()
+    return df
 
 def describe(arr):
     funcs = [np.size, np.min, np.max, np.mean, np.median, np.var,

@@ -1,5 +1,4 @@
-import itertools
-import warnings
+import logging
 
 from numpy import ma
 from numpy.ma import MaskedArray, MAError, add, array, asarray, concatenate, count, \
@@ -14,6 +13,9 @@ from numpy.lib.index_tricks import AxisConcatenator
 from numpy.linalg import lstsq
 
 import jtmri.utils
+
+
+log = logging.getLogger(__name__)
 
 
 def flatten_inplace(seq):
@@ -136,6 +138,8 @@ def flatten_axes(a, axis, keepdims=False):
     Examples:
     >>> import numpy as np
     >>> x = np.ones((5,4,3,2,1))
+    >>> flatten_axes(x, axis=[]).shape
+    (5, 4, 3, 2, 1)
     >>> flatten_axes(x, axis=(0,1)).shape
     (20, 3, 2, 1)
     >>> flatten_axes(x, axis=(0,1), keepdims=True).shape
@@ -144,13 +148,17 @@ def flatten_axes(a, axis, keepdims=False):
     (120, 1, 1, 1, 1)
     >>> flatten_axes(x, axis=(0,1,2,3,4)).shape
     (120,)
+    >>> flatten_axes(x, axis=(2,3)).shape
+    (5, 4, 6, 1)
     >>> np.array_equal(x.flatten(), flatten_axes(x, axis=(0,1,2,3,4)))
     True
     '''
     axes = np.array(sorted(jtmri.utils.as_iterable(axis)))
-    bad_axes = list(axes[axes > a.ndim])
+    bad_axes = list(axes[axes >= a.ndim])
     assert not bad_axes, 'Axes {!r} are bigger then a.ndim={!r}'.format(bad_axes, a.ndim)
 
+    if len(axes) == 0:
+        return a
     out_shape = np.array(a.shape)
     out_shape[axes[0]] = -1
     if keepdims:
@@ -158,19 +166,23 @@ def flatten_axes(a, axis, keepdims=False):
     else:
         diff = [i for i in range(a.ndim) if i not in axes[1:]]
         out_shape = out_shape[diff]
-
     # Preserve the ordering from the input array
     return a.reshape(out_shape, order='A')
 
 
-def apply_to_axes(func, a, axis, keepdims=False):
-    '''Apply func to a flattened version of a.
+def apply_to_axes(func, arr, axes, keepdims=False):
+    """Apply func to a flattened version of a.
 
-    Args:
-    func    -- function to apply, takes array and returns scalar, must accept
-               kwarg axis, indicating which axis to act on.
-    a       -- array to apply function to
-    axis    -- axis to apply function over
+    Parameters
+    ==========
+    func : (ndarray, axis) -> scalar
+        Function to apply to flattened array.
+        Takes an ndarray and returns a scalar, must accept
+        kwarg axis, indicating which axis to act on.
+    arr : ndarray
+        array to apply function to
+    axes : iterable or scalar
+        axis/axes to apply function over
 
     Returns:
     The result of applying func to the input array flattened along the specified axes.
@@ -178,34 +190,91 @@ def apply_to_axes(func, a, axis, keepdims=False):
     Examples:
     >>> import numpy as np
     >>> x = np.ones((5,4,3,2,1))
-    >>> apply(np.sum, x, axis=(0,1)).shape
+    >>> apply_to_axes(np.sum, x, axes=(0,1)).shape
     (3, 2, 1)
-    >>> apply(np.sum, x, axis=(0,1,2))
+    >>> apply_to_axes(np.sum, x, axes=(0,1,2))
     np.array([[60.],
               [60.]])
-    '''
-    axes = np.array(sorted(jtmri.utils.as_iterable(axis)))
-    return func(flatten_axes(a, axis, keepdims), axis=axes[0])
+    """
+    axes = np.array(sorted(jtmri.utils.as_iterable(axes)))
+    return func(flatten_axes(arr, axes, keepdims), axis=axes[0])
 
 
-def iter_axis(a, axis):
-    '''Generates arrays by iterating over the specified axis.
-    If this axis does not exist, then nothing is generated
-    '''
-    if axis > a.ndim:
-        yield
+def expand(arr, shape):
+    """Expand a ndarray to dims by duplicating it
+    Parameters
+    ==========
+    arr : ndarray
+    shape : iterable
+        Iterable containing the size of each new dimension.
+        These dimensions are appended to the existing ones in arr
+
+    Returns
+    =======
+    ndarray
+        `arr` expanded with new dims
+
+    Examples
+    ========
+    >>> a = np.ones((3, 3));
+    >>> a.shape
+    [3, 3]
+    >>> a = expand(a, (4, 5, 6));
+    >>> a.shape
+    [3, 3, 4, 5, 6]
+    """
+    for s in tuple(shape):
+        arr = np.tile(arr[..., np.newaxis], s)
+    return arr 
+
+
+def iter_axes(a, axes):
+    """Generates arrays by iterating over the specified axis.
+    Parameters
+    ==========
+    a : ndarray
+    axes : int or iterable
+        axis or axes to iterate over. Axes are iterated over in order, starting from the last one.
+        For example, if axes=(3,4,5), then dimension 5 is iterated over first, then 4, then 3.
+
+    Returns
+    =======
+    Generator over the axes requested to iterate on
+    """
+    all_axes = np.array(sorted(jtmri.utils.as_iterable(axes)))
+    dropped_axes = all_axes[all_axes >= a.ndim]
+    if len(dropped_axes) > 0:
+        log.warn('Axes larger than a.ndim (%r) have been dropped', dropped_axes, a.ndim)
+    axes = all_axes[all_axes < a.ndim]
+
+    if len(axes) == 0:
+        raise StopIteration()
+    a = flatten_axes(a, axes)
+    axis = sorted(axes)[0]
     for arr in np.rollaxis(a, axis):
         yield arr
 
 
-def mosaic(a, aspect=16/9., fill=np.nan):
-    '''Turn a N-D array a into a mosaic
-    Args:
-    a   -- N-D ndarray
-    Returns a 2-D ndarray
-    '''
-    a = a.reshape((a.shape[0], a.shape[1], -1))
-    _, _, N = a.shape
+def mosaic(arr, aspect=16/9., fill=np.nan):
+    """Turn a ndarray into a mosaic by reducing all dimensions above the first two
+    Parameters
+    ==========
+    arr : ndndarray
+    aspect : float
+        Ratio between dimension 1 (width) and dimension 0 (height)
+    fill : object
+        If the aspect ratio cannot be satisfied given the shape of the input array,
+        then fill any missing values with `fill`
+
+    Returns
+    =======
+    ndarray:
+        2D array mosaic from input array with aspect ratio `aspect`
+    """
+    if arr.ndim < 3:
+        return arr
+    arr_3d = flatten_axes(arr, range(2, arr.ndim))
+    N = arr_3d.shape[2]
     if N == 1:
         nc, nr = 1, 1
     else:
@@ -213,10 +282,14 @@ def mosaic(a, aspect=16/9., fill=np.nan):
         nr = int(np.ceil(N / float(nc)))
     pad = (nr * nc) - N
     if pad > 0:
-        pad_im = fill * np.ones(a.shape[:2] + (pad,))
-        a = np.concatenate((a, pad_im), 2)
-    long_arr = np.vstack(np.rollaxis(a, -1))
-    return np.hstack(np.array_split(long_arr, nr))
+        pad_im = fill * np.ones(arr_3d.shape[:2] + (pad,))
+        arr_3d = np.concatenate((arr_3d, pad_im), 2)
+    long_arr = np.vstack(np.rollaxis(arr_3d, -1))
+    mos = np.hstack(np.array_split(long_arr, nr))
+    if np.ma.isMaskedArray(arr):
+        mos = np.ma.array(mos, mask=mosaic(arr.mask, aspect=aspect, fill=True))
+    return mos
+
 
 
 def checkerboard(shape, cell_len):

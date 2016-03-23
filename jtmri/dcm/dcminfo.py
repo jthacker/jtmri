@@ -94,11 +94,14 @@ class GRE(object):
         meta = AttributeDict({})
         meta.r2star_series = None
         meta.t2star_series = None
-        def fit(dcm=dcm, study_dcms=study_dcms):
+        def fit(dcm=dcm, study_dcms=study_dcms, full=False):
             series = study_dcms.by_series(dcm.SeriesNumber)
             data = series.data('SliceLocation')
             echo_times = series.all_unique.EchoTime / 1000.
-            return fit_r2star_with_threshold(echo_times, data)
+            r2star, residuals = fit_r2star_with_threshold(echo_times, data)
+            if full:
+                return r2star, residuals
+            return r2star
         meta.r2star_offline = fit
 
         meta.sequence = 'gre'
@@ -141,11 +144,14 @@ class SE(object):
     def create_metadata(dcm, study_dcms, old_meta):
         meta = AttributeDict({})
         meta.sequence = 'se'
-        def fit(dcm=dcm, study_dcms=study_dcms):
+        def fit(dcm=dcm, study_dcms=study_dcms, full=False):
             series = study_dcms.by_series(dcm.SeriesNumber) 
             data = series.data('SliceLocation')
             echo_times = series.all_unique.EchoTime / 1000.
-            return fit_r2star_with_threshold(echo_times, data)
+            r2, residuals = fit_r2star_with_threshold(echo_times, data)
+            if full:
+                return r2, residuals
+            return r2
         meta.r2_offline = fit
         return meta
 _register_seq('se', SE)

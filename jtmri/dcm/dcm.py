@@ -17,6 +17,8 @@ from ..progress_meter import progress_meter_ctx
 from ..utils import (unique, AttributeDict, ListAttrAccessor, Lazy,
                      is_sequence, path_generator, groupby, Grouped, filter_error)
 from . import dcminfo
+from jtmri.np import iter_axes
+from jtmri.utils import flatten
 
 
 log = logging.getLogger(__name__)
@@ -146,8 +148,8 @@ class DicomSet(object):
     def disp(self, extra_columns=tuple(), show_meta=True):
         disp(self, extra_columns, show_meta)
 
-    def view(self, groupby=tuple(), roi_filename=None, roi_tag=None):
-        return view(self, groupby, roi_filename, roi_tag)
+    def view(self, groupby=tuple(), roi_filename=None, roi_tag=None, viewer=None, viewer_kws=None):
+        return view(self, groupby, roi_filename, roi_tag, viewer, viewer_kws)
 
     def data(self, groupby=tuple()):
         return data(self, field='pixel_array', groupby=groupby)
@@ -503,28 +505,68 @@ def disp(dicomset, extra_columns=tuple(), show_meta=True):
         print('Dicom list is empty')
 
 
-def view(dicoms, groupby=tuple(), roi_filename=None, roi_tag='/'):
-    '''Display a dicomset with arrview
-    Args:
-    dicoms  -- An iterable of dicoms
-    groupby -- Before displaying, group the dicoms (see data function)
-    roi_filename -- Filename of rois to load. If not specified and the dicomset
-                    has rois, then those are loaded instead.
-    roi_tag -- (default: '/') When using the rois from the dicomset, 
-               this is the roi tag to load.
+def view(dicoms, groupby=tuple(), roi_filename=None, roi_tag=None, viewer=None, viewer_kws=None):
+    """Display a dicomset with arrview
+    Parameters
+    ==========
+    dicoms : iterable of dicoms
+        An iterable of dicoms
+    groupby
+        Before displaying, group the dicoms (see data function)
+    roi_filename : str
+        Filename of rois to load. If not specified and the dicomset
+        has rois, then those are loaded instead.
+    roi_tag : str (default: '/')
+        When using the rois from the dicomset, this is the roi tag to load.
+    viewer : str
+        Either arrview or matplotlib.
+    viewer_kws : dict (default: {})
+        Keyword arguments to send to the viewer
 
-    Returns:
+    Returns
+    =======
     Displays the dicoms using arrview and returns the instance once
-    the window closes
-    '''
-    import arrview
+    the window closes.
+    """
+    viewer = viewer or 'arrview'
+    viewer_kws = viewer_kws or {}
     arr = data(dicoms, field='pixel_array', groupby=groupby)
-    df = dicoms.first
-    if roi_filename is None and df.meta.get('roi_filename'):
-        roi_filename = df.meta.roi_filename.get(roi_tag)
+    if viewer == 'matplotlib':
+        assert 2 <= arr.ndim <= 4, 'matplotlib viewer can only handle 4 or less dims'
+        
+        import pylab
+        from matplotlib import gridspec
+        shape = arr.shape
+        nrows = 1 if arr.ndim < 3 else shape[2]
+        ncols = 1 if arr.ndim < 4 else shape[3]
+        figure_kws = viewer_kws.get('figure_kws', {})
+        if 'figsize' not in figure_kws:
+            aspect_ratio = ncols * shape[1] / float(nrows * shape[0])
+            height = 10
+            figure_kws['figsize'] = (height * aspect_ratio, height)
+        fig = pylab.figure(**figure_kws)
+        gs = gridspec.GridSpec(nrows, ncols, wspace=0, hspace=0)
+        first_ax = None
+        for spec, im in zip(iter(gs), iter_axes(arr, range(arr.ndim)[2:])):
+            ax = pylab.subplot(spec, sharex=first_ax, sharey=first_ax)
+            if first_ax is None:
+                first_ax = ax
+            ax.set_axis_off()
+            ax.set_aspect('equal')
+            ax.imshow(im, **viewer_kws.get('imshow_kws', {}))
+
+        return fig
+
+    elif viewer == 'arrview':
+        import arrview
+        dcm = dicoms.first
+        if roi_filename is None and dcm.meta.get('roi_filename'):
+            roi_filename = dcm.meta.roi_filename.get(roi_tag)
+        else:
+            roi_filename = os.path.dirname(dcm.filename)
+        return arrview.view(arr, roi_filename=roi_filename, **viewer_kws)
     else:
-        roi_filename = os.path.dirname(df.filename)
-    return arrview.view(arr, roi_filename=roi_filename)
+        raise Exception('Unknown viewer %r' % viewer)
 
 
 def dcm_copy(dicoms, dest):
