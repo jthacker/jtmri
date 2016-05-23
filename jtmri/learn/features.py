@@ -4,16 +4,32 @@ import itertools
 import jtmri.utils
 
 
-def generate_spatial_context_features(n, max_distance=100, min_region_len=0, max_region_len=100):
+def generate_spatial_context_features(n, min_distance=0, max_distance=100, min_region_len=0, max_region_len=100):
     """Create n features based on Criminsi2009 long range spatial features
     A feature consists of the mean value of some parameterized portion of the image.
+    Features are generated based on uniform interval distributions.
     Features consist of a distance vector and a box size.
-    All measurements are in millimeters.
-    
-    Returns: An array of the feature paramters.
-    Each set of parameters consists of 4 parameters: x-distance, y-distance, width, height
+
+    Parameters
+    ----------
+    n : int
+        Number of spatial features to create
+    min_distance : float (default: 0)
+        Minimum distance of a generated feature from the origin
+    max_distance : float (default: 100)
+        Maximum distance of a generated feature from the origin
+    min_region_len : float (default: 0)
+        Minimum length of a generated feature side
+    max_region_len : float (default: 100)
+        Maximum length of a generated feature side
+   
+    Returns
+    -------
+    ndarray
+        An array of the feature paramters.
+        Each set of parameters consists of 4 values: x-distance, y-distance, width, height
     """
-    radius = max_distance * np.sqrt(np.random.uniform(low=0, high=1, size=n))
+    radius = min_distance + (max_distance - min_distance) * np.sqrt(np.random.uniform(low=0, high=1, size=n))
     theta = np.random.uniform(low=0, high=2*np.pi, size=n)
     height = np.random.uniform(low=min_region_len, high=max_region_len, size=n)
     width = np.random.uniform(low=min_region_len, high=max_region_len, size=n)
@@ -29,7 +45,7 @@ def plot_spatial_context_features_distributions(features, bins=25):
     ]
     _, axs = pl.subplots(ncols=2, nrows=2)
     axs = jtmri.utils.flatten(axs)
-    for (name,), ax, data in zip(params, axs, jtmri.np.iter_axis(features, 1)):
+    for (name,), ax, data in zip(params, axs, jtmri.np.iter_axes(features, 1)):
         ax.hist(data, bins=bins)
         ax.set_title(name)
     pl.tight_layout()
@@ -41,8 +57,6 @@ def plot_spatial_context_features(origin, features, scale=(1, 1), ax=None, show_
         _, ax = pl.subplots()
     ax.set_aspect('equal')
     ox, oy = origin
-    ymin, ymax = 0, 0
-    xmin, xmax = 0, 0
     sx, sy = scale
     for x, y, w, h in features:
         x /= sx
@@ -52,16 +66,6 @@ def plot_spatial_context_features(origin, features, scale=(1, 1), ax=None, show_
         ax.add_patch(Rectangle((ox + x - w/2, oy + y - h/2), w, h, facecolor=(1,0,0,0.1)))
         if show_arrows:
             ax.add_patch(Arrow(ox, oy, x, y))
-        xmin = min(xmin, ox + x - w)
-        ymin = min(ymin, oy + y - h)
-        xmax = max(xmax, ox + x + w)
-        ymax = max(ymax, oy + y + h)
-    xmin = min(xmin, ymin)
-    ymin = xmin
-    xmax = max(xmax, ymax)
-    ymax = xmax
-    ax.set_xlim(xmin, xmax)
-    ax.set_ylim(ymin, ymax)
 
 
 def integral_image(image):

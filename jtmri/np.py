@@ -123,6 +123,15 @@ def apply_along_axis(func1d, axis, arr, *args, **kwargs):
 apply_along_axis.__doc__ = np.apply_along_axis.__doc__
 
 
+
+def substitutions(a, b):
+    """Generate the substition pairs to take a to b"""
+    assert len(a) == len(b)
+    for i, j in zip(a, b):
+        if i != j:
+            yield (i, j)
+
+
 def flatten_axes(a, axis, keepdims=False):
     '''A view of the input array with the specified axes collapsed into
     the first specified axis.
@@ -225,7 +234,7 @@ def expand(arr, shape):
     """
     for s in tuple(shape):
         arr = np.tile(arr[..., np.newaxis], s)
-    return arr 
+    return arr
 
 
 def iter_axes(a, axes):

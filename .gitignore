@@ -2,3 +2,5 @@
 *.swp
 *.swo
 .DS_Store
+/.eggs
+/jtmri.egg-info

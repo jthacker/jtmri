@@ -1,36 +1,27 @@
 import skimage.exposure
 from .features import spatial_context_features_response
-from jtmri.phantom import phantom
 from skimage.morphology import binary_dilation, disk
 import numpy as np
 from numpy.random import normal
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import pylab as pl
 
+import logging
 
-def _features(im, feature_params, mask, scale):
-    features = spatial_context_features_response(im, feature_params, scale, mask)
-    features[np.isnan(features)] = 0
-    features[np.isinf(features)] = 0
-    return features
-    
-    
-def train_single_image_classifier(clf, im, pos_mask, feature_params, scale):
+
+log = logging.getLogger(__name__)
+
+
+def train_single_image_classifier(clf, im, pos_mask, neg_mask, features):
     if pos_mask.sum() == 0:
+        log.debug('positive mask is empty, skipping')
         return
-    neg_mask = (binary_dilation(pos_mask, selem=disk(20))).astype(bool) - pos_mask
     mask = pos_mask | neg_mask
     classes = pos_mask[mask]  ## Positive examples are 1, negatives are 0
-    im = skimage.exposure.rescale_intensity(im, out_range=(0, 1))
-    features = _features(im, feature_params, mask, scale)
     clf.fit(features, classes)
 
+
 norm = lambda loc=0.,scale=1.,size=1: loc if scale==0 else normal(loc, scale, size)
-
-
-def shepp_logan(n=256, mask_num=6):
-    im, masks = phantom(n, ret_masks=True)
-    return im, masks[mask_num]
 
 
 def gen_modified_images(image, mask, 
@@ -52,21 +43,6 @@ def gen_modified_images(image, mask,
         im = skimage.transform.warp(image, tr) + noise + bias
         yield im, pos_mask
         
-
-def predict_class(clf, im, feature_params, scale):
-    N, M = im.shape
-    im = skimage.exposure.rescale_intensity(im, out_range=(0, 1))
-    features = _features(im, feature_params, np.ones_like(im, dtype=bool), scale)
-    return clf.predict(features).reshape(N, M)
-
-
-def predict_proba(clf, im, feature_params, scale):
-    N, M = im.shape
-    im = skimage.exposure.rescale_intensity(im, out_range=(0, 1))
-    features = _features(im, feature_params, np.ones_like(im, dtype=bool), scale)
-    C = clf.classes_.size
-    return clf.predict_proba(features).reshape(N, M, C)
-
 
 def plot_predictions(im, actual_mask, pos_class_prediction, prob_prediction):
     _, axs = pl.subplots(ncols=4, figsize=(25,10))
