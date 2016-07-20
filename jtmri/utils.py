@@ -475,3 +475,14 @@ def groupby(iterable, grouper=lambda x: x, group_type=list):
         key = tuple(f(item) for f in keyfuncs)
         out[key].append(item)
     return Grouped((k, group_type(v)) for k, v in out.iteritems())
+
+
+logging_format = '%(asctime)-15s [%(levelname)s] %(name)s: %(message)s'
+
+
+def enable_logging(logger=None, level=logging.DEBUG):
+    """Setup basic logging for the given logger"""
+    if logger is None:
+        logger = logging.getLogger()
+    logging.basicConfig(format=logging_format)
+    logger.setLevel(level)
