@@ -58,7 +58,7 @@ class DicomStudySummaryReport(Report):
             'Study Date: {}\n' \
             'Study Time: {}\n'.format(
                 s.PatientName,
-                s.StudyDescription,
+                s.get('StudyDescription', 'No Description'),
                 s.StudyDate,
                 s.StudyTime)
         super(DicomStudySummaryReport, self).__init__(title, description)
@@ -83,7 +83,7 @@ class DicomStudySummaryReport(Report):
         if title is None:
             title = 'Series %d' % s.SeriesNumber
         if description is None:
-            description = s.SeriesDescription
+            description = s.get('SeriesDescription', 'No Description')
         data = dcms.data(['SliceLocation'])
         self.add_images(title, description, data)
         self._roi_table.add_series(title, dcms)

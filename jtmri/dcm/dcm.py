@@ -596,9 +596,9 @@ def _clean(attr):
 
 def canonical_filename(dcm, ext='ima'):
     """Returns the canonical name for a dicom file"""
-    attrs = [dcm.PatientName,
+    attrs = [dcm.get('PatientName', 'NO_PATIENT_NAME'),
              dcm.Modality,
-             dcm.StudyDescription,
+             dcm.get('StudyDescription', 'NO_DESCRIPTION'),
              '%04d' % int(dcm.StudyID),
              '%04d' % dcm.SeriesNumber,
              '%04d' % dcm.InstanceNumber,
