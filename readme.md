@@ -1,1 +1,1 @@
-Useful code for doing MRI research
+Code for doing MRI research
