@@ -100,6 +100,6 @@ class DicomStudySummaryReport(Report):
         if description is None:
             description = 'R2* fit. TE: ' + str(echo_times)
         data = dcms.data(['SliceLocation'])
-        r2star = fit_r2star_with_threshold(echo_times, data)
+        r2star, _ = fit_r2star_with_threshold(echo_times, data)
         self.add_images(title, description, r2star)
         self._roi_table.add_ndarray(title, r2star, s.meta.roi)

@@ -76,5 +76,5 @@ class CombineForm722Report(Report):
                     else:
                         echo_times = dcms.all_unique.EchoTime / 1000.
                         data = dcms.data('SliceLocation')
-                        r2star = fit_r2star_with_threshold(echo_times, data)
+                        r2star, _ = fit_r2star_with_threshold(echo_times, data)
                         add_roi(table, dcms.first.meta.roi, side, region, r2star, description)
