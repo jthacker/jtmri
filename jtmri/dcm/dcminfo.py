@@ -1,6 +1,9 @@
 import collections
 import copy
 from glob import iglob
+import itertools
+import logging
+import numpy as np
 import os
 import os.path
 import re
@@ -11,6 +14,9 @@ from ..cache import memoize
 from ..roi import read as read_roi
 from ..fit import fit_r2star_with_threshold
 from .. import asl
+
+
+log = logging.getLogger(__name__)
 
 
 _sequences = {}
@@ -141,13 +147,47 @@ _register_seq('adc', ADC)
 
 class SE(object):
     @staticmethod
+    def _get_echotimes(series):
+        """Get echo times for ep2d_diff sequence"""
+        if len(series.all_unique.SeriesNumber) > 1:
+            return series.all_unique.EchoTime / 1000.
+        proto = series.first.Siemens.MrPhoenixProtocol
+        num_contrasts = int(proto['lContrasts'])
+        alTE = [(int(k), int(v)) for k,v in proto['alTE'].items()]
+        alTE = sorted(alTE, key=lambda v: v[0])
+        te = [v for k,v in alTE]
+        return np.array(te[:num_contrasts]) * 1e-6
+
+    @staticmethod
+    def _get_data(series, study_dcms):
+        # Sometimes SE sequences were acquired as multiple series with different TEs in each series
+        # This will attempt to extract a set consiting of multiple series or just for a single one
+        echo_times = series.all_unique.EchoTime / 1000.
+        if len(echo_times) > 1:
+            return echo_times, series.data('SliceLocation')
+        series_numbers = [series.first.SeriesNumber]
+        for n in itertools.count(series_numbers[0] + 1):
+            ser = study_dcms.by_series(n)
+            if not ser:
+                break
+            dcm = ser.first
+            if not hasattr(dcm, 'SequenceName'):
+                continue
+            if dcm.SequenceName != series.first.SequenceName:
+                break
+            series_numbers.append(n)
+        log.debug("found SE sequence with series numbers: %s", series_numbers)
+        dcms = study_dcms.by_series(*series_numbers)
+        echo_times = SE._get_echotimes(dcms)
+        return echo_times, dcms.data('SliceLocation')
+
+    @staticmethod
     def create_metadata(dcm, study_dcms, old_meta):
         meta = AttributeDict({})
         meta.sequence = 'se'
         def fit(dcm=dcm, study_dcms=study_dcms, full=False):
-            series = study_dcms.by_series(dcm.SeriesNumber) 
-            data = series.data('SliceLocation')
-            echo_times = series.all_unique.EchoTime / 1000.
+            series = study_dcms.by_series(dcm.SeriesNumber)
+            echo_times, data = SE._get_data(series, study_dcms)
             r2, residuals = fit_r2star_with_threshold(echo_times, data)
             if full:
                 return r2, residuals

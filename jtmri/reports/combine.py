@@ -40,7 +40,7 @@ class CombineForm722Report(Report):
             .format(
                 observer,
                 s.PatientName,
-                s.StudyDescription,
+                s.get('StudyDescription', 'No Description'),
                 s.StudyDate,
                 s.StudyTime,
                 datetime.now()
