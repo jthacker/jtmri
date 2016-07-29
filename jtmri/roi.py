@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 from collections import namedtuple, defaultdict
+import logging
+import os
+
+from arrview.slicer import SliceTuple
 import h5py
 import numpy as np
-import os
 from prettytable import PrettyTable
 import skimage.draw
 
@@ -11,105 +14,7 @@ from .utils import unique, rep, path_generator, groupby, AttributeDict
 ROI_FILE_EXT = '.h5'
 
 
-#TODO: Duplicate code from arrview
-
-class SliceTuple(tuple):
-    def __init__(self, *args, **kwargs):
-        super(SliceTuple, self).__init__(*args, **kwargs)
-        self._xdim = self.index('x')
-        self._ydim = self.index('y')
-
-    @property
-    def xdim(self):
-        return self._xdim
-
-    @property
-    def ydim(self):
-        return self._ydim
-   
-    @property
-    def viewdims(self):
-        return (self.xdim, self.ydim)
-
-    @property
-    def is_transposed(self):
-        return self.ydim > self.xdim
-
-    def viewarray(self, arr):
-        '''Transforms arr from Array coordinates to Screen coordinates
-        using the transformation described by this object'''
-        assert arr.ndim == len(self), 'dimensions of arr must equal the length of this object'
-        viewdims = self.viewdims
-        arrayslice = [slice(None) if d in viewdims else x for d,x in enumerate(self)]
-        a = arr[arrayslice]
-        return a.transpose() if self.is_transposed else a
-
-    def screen_coords_to_array_coords(self, x, y):
-        '''Transforms arr of Screen coordinates to Array indicies'''
-        r,c = (y,x) if self.is_transposed else (x,y)
-        return r,c
-
-    def slice_from_screen_coords(self, x, y, arr):
-        slc = list(self)
-        rdim,cdim = self.screen_coords_to_array_coords(*self.viewdims)
-        slc[rdim],slc[cdim] = self.screen_coords_to_array_coords(x,y)
-        return slc
-
-    #TODO: deprecate
-    def is_transposed_view_of(self, slc):
-        '''Test if slc is equal to this object but with swapped x and y dims swapped
-        Args:
-        slc -- (SliceTuple)
-
-        Returns:
-        True if slc equals this object with swapped view dimensions, otherwise False.
-
-        Examples:
-        >>> a = SliceTuple(('x','y',0,1))
-        >>> b = SliceTuple(('y','x',0,1))
-        >>> c = SliceTuple(('y','x',0,20))
-        >>> a.is_transposed_view_of(b)
-        True
-        >>> b.is_transposed_view_of(a)
-        True
-        >>> a.is_transposed_view_of(c)
-        False
-        '''
-        s = list(self)
-        # Swap the axes
-        s[self.xdim],s[self.ydim] = s[self.ydim],s[self.xdim]
-        return s == list(slc)
-
-    @property
-    def freedims(self):
-        return tuple(i for i,x in enumerate(self) if i not in self.viewdims)
-
-    #TODO: @deprecated: Get rid of this method
-    @staticmethod
-    def from_arrayslice(arrslice, viewdims):
-        '''Replace the dims from viedims in arrslice.
-        Args:
-        arrslice -- a tuple used for slicing a numpy array. The method arrayslice
-                    returns examples of this type of array
-        viewdims -- a len 2 tuple with the first position holding the dimension
-                    number that corresponds to the x dimension and the second is
-                    the y dimension.
-        Returns:
-        arrslice with each dim in viewdims replaced by 'x' or 'y'
-
-        For example:
-        >>> arrslice = (0,0,0,0)
-        >>> viewdims = (1,0)
-        >>> from_arrayslice(arrslice, viewdims)
-        ('y','x',0,0)
-        '''
-        slc = list(arrslice)
-        xdim,ydim = viewdims
-        slc[xdim],slc[ydim] = 'x','y'
-        return SliceTuple(slc)
-
-    def __repr__(self):
-        return 'SliceTuple({})'.format(', '.join(map(repr, self)))
+log = logging.getLogger(__name__)
 
 
 def create_mask(shape, slc, poly, collapse=False):
@@ -130,16 +35,15 @@ def create_mask(shape, slc, poly, collapse=False):
         y,x = skimage.draw.polygon(y=poly[:,1], x=poly[:,0], shape=viewShape)
         idxs = slc.slice_from_screen_coords(x, y, mask)
         if collapse:
-            idxs = idxs[:mask.ndim] 
+            idxs = idxs[:mask.ndim]
         mask[idxs] = True
     return mask
 
 
 class ROI(object):
-    def __init__(self, name, poly, slc, props=None):
+    def __init__(self, name, mask, props=None):
         self.name = name
-        self.poly = poly
-        self.slc = slc
+        self.mask = mask
         self.props = AttributeDict(props or {})
 
     @property
@@ -156,10 +60,10 @@ class ROI(object):
             shape    -- shape of output mask
             collapse -- (default:False) collapse the ROI to fit in mask
         """
-        return create_mask(shape, self.slc, self.poly, collapse)
-    
+        return self.mask
+
     def __repr__(self):
-        return '<ROI name:{!r} slc:{!r} props:{!r} ...>'.format(self.name, self.slc, self.props)
+        return '<ROI name:{!r} props:{!r} shape:{!r} ...>'.format(self.name, self.props, self.mask.shape)
 
 
 
@@ -195,14 +99,14 @@ class ROISet(object):
     def by_tag(self, tag):
         """Used by dicom viewer for distinguishing user ROIs"""
         return self.filter(lambda r: r.tag == tag)
-    
+
     def groupby(self, grouper):
         return groupby(self, grouper, group_type=ROISet)
 
     def to_mask(self, shape, collapse=False):
         '''Create a mask from the ROIs'''
         masks = map(lambda a: a.to_mask(shape, collapse), self)
-        return reduce(np.logical_or, masks, np.zeros(shape, dtype=bool)) 
+        return reduce(np.logical_or, masks, np.zeros(shape, dtype=bool))
 
     def to_masked(self, array, collapse=False):
         '''Returns a numpy masked array'''
@@ -233,7 +137,7 @@ class ROISet(object):
         columns = [
             ('name',  lambda roi: roi.name),
             ('slice', lambda roi: roi.slc)]
-        
+
         common_prop_names = self.common_prop_names()
 
         columns += [
@@ -271,49 +175,109 @@ class ROISet(object):
         '''Returns an iterator over the ROIs in this object'''
         return iter(self.rois)
 
-
-def load(filename, extra_props=None):
-    """Load a single ROI file"""
-    extra_props = extra_props or {}
-    rois = []
-    with h5py.File(filename, 'r') as f:
-        for roigrp in f['/rois'].itervalues():
-            viewdims = roigrp.attrs['viewdims']
-            arrslc = roigrp.attrs['arrslc']
-            props = extra_props.copy()
-            props.update(dict(
-                abspath=os.path.abspath(filename)
-            ))
-            rois.append(
-                ROI(name=roigrp.attrs['name'],
-                    poly=roigrp['poly'].value,
-                    slc=SliceTuple.from_arrayslice(arrslc, viewdims),
-                    props=props))
-    return ROISet(rois)
+class ROIFormatError(Exception):
+    pass
 
 
 def store(rois, filename):
-    """ Save ROIs to the file specified by filename
-    Args:
-      rois     -- should be an iterable of rois
-      filename -- string of the name of the file to write too
+    """Save ROIs to filename
 
-    Returns: None
+    Parameters
+    ----------
+    rois : iterable
+        iterable of ROIs to save
+    filename : str
+        name of file to save ROIs to
     """
-    def _filter_viewdims(slc):
-        viewdims = slc.viewdims
-        return [0 if d in viewdims else v for d,v in enumerate(slc)] 
-
     with h5py.File(filename, 'w') as f:
+        f.attrs['version'] = _version
+        f.attrs['description'] = _file_description
+        f.attrs['creation_time'] = time.time()
         root = f.create_group('rois')
-        for i,roi in enumerate(rois):
-            roigrp = root.create_group('%d' % i)
-            # h5py only support utf8 strings at the moment, need to coerce data to
-            # this representation
+        for i, roi in enumerate(rois):
+            roigrp = root.create_group('roi_%d' % i)
+            roigrp.attrs['index'] = i
             roigrp.attrs['name'] = roi.name
-            roigrp.attrs['viewdims'] = roi.slc.viewdims
-            roigrp.attrs['arrslc'] = _filter_viewdims(roi.slc)
-            roigrp['poly'] = roi.poly
+            roigrp.create_dataset('mask',
+                                  data=roi.mask,
+                                  dtype=bool,
+                                  compression=_compression_type,
+                                  compression_opts=_compression_opts)
+        log.debug('rois saved to:{!r} count:{!r} version:{!r} time:{!r}'
+                .format(filename, len(rois), _version, f.attrs['creation_time']))
+
+
+def load(filename, extra_props=None, shape=None):
+    """Load ROIs from filename
+
+    Parameters
+    ----------
+    filename : str
+        name of file to load ROIs from
+    shape : (default: None) tuple
+        shape of ROI masks, used only for loading version 0 ROI files
+    extra_props : dict
+        add extra properties to the loaded ROI
+    Returns
+    -------
+    List of ROIs loaded from file
+    """
+    extra_props = extra_props or {}
+    rois = _load(filename, shape, extra_props)
+    for roi in rois:
+        props = extra_props.copy()
+        props.update(dict(
+            abspath=os.path.abspath(filename)
+        ))
+        roi.props = props
+    return ROISet(rois)
+
+
+def _load(filename, shape, extra_props):
+    rois = {}
+    with h5py.File(filename, 'r') as f:
+        version = f.attrs.get('version')
+        log.debug('loading ROIs from {!r}, version: {!r}'.format(filename, version))
+        if version == 1:
+            return _parse_version1(f)
+        return _parse_version0(f, shape)
+
+
+def _parse_version1(f):
+    rois = {}
+    creation_time = f.attrs.get('creation_time')
+    for roigrp in f['/rois'].itervalues():
+        index = roigrp.attrs['index']
+        rois[index] = ROI(
+                name=roigrp.attrs['name'],
+                mask=roigrp['mask'].value)
+    return [rois[i] for i in sorted(rois)]
+
+
+def _convert_version0(roi_dict, shape):
+    rois = []
+    for name, _rois in roi_dict.items():
+        if _rois:
+            roi = ROI(name=name, mask=np.zeros(shape, dtype=bool))
+            for _roi in _rois:
+                mask = create_mask(shape, _roi['slc'], _roi['poly'])
+                roi.mask = np.logical_or(roi.mask, mask)
+            rois.append((_rois[0]['slc'], roi.name, roi))
+    return [r[2] for r in sorted(rois, key=lambda r: (r[0], r[1]))]
+
+
+def _parse_version0(f, shape):
+    assert shape, 'shape must be set to parse version 0 ROI files'
+    rois = defaultdict(list)
+    for roigrp in f['/rois'].itervalues():
+        viewdims = roigrp.attrs['viewdims']
+        arrslc = roigrp.attrs['arrslc']
+        roi = dict(
+                name=roigrp.attrs['name'],
+                poly=roigrp['poly'].value,
+                slc=SliceTuple.from_arrayslice(arrslc, viewdims))
+        rois[roi['name']].append(roi)
+    return _convert_version0(rois, shape)
 
 
 def read(paths, basepath=None, recursive=True):
@@ -331,7 +295,7 @@ def read(paths, basepath=None, recursive=True):
     └── sub1
         ├── rois2.h5
         └── rois3.h5
-    
+
     Reading this directory (i.e. read('rois')) will consume the six ROI files.
     """
     rois = []

@@ -1,1 +1,3 @@
 -e .
+-e git+https://github.com/jthacker/arrview.git@v1.1.0#egg=arrview
+pytest >= 2.9

@@ -43,7 +43,7 @@ class DicomParser(object):
             pass
         d['pixel_array'] = pixel_array
         return d
-    
+
     @staticmethod
     def _convert(val):
         if isinstance(val, list):
@@ -179,8 +179,7 @@ class DicomSet(object):
             for key, roiset in dcm.meta.roi.groupby(roi_groupby).iteritems():
                 out[(series.first.SeriesNumber,) + key] = roiset.to_masked(data, collapse)
         return Grouped(out)
-                
-    
+
     @property
     def count(self):
         return len(self)
@@ -226,14 +225,14 @@ def data(iterable, field, groupby=tuple(), reshape=True):
     Returns:
         A numpy array grouped by groupby and reshaped to fit if specified.
         If reshape is False, then data will be appended on the last
-        dimension (second dimension for 1D data and third for 3D data), 
+        dimension (second dimension for 1D data and third for 3D data),
         and sorted by the groupby fields.
 
-    If the data from all the objects in the set do not have the same 
-    dimensions then this method will fail. Instead, 
+    If the data from all the objects in the set do not have the same
+    dimensions then this method will fail. Instead,
     use [o.field for o in subset] to get a list.
 
-    Examples for a set of dicoms with 5 SliceLocations and 3 
+    Examples for a set of dicoms with 5 SliceLocations and 3
     images at each location
     >>> # Now apply data to all dicoms in the set
     >>> data(dcms, field='pixel_array').shape
@@ -400,7 +399,7 @@ def read(path=None, disp=True, recursive=False, progress=lambda x:x, use_info=Tr
             progress(len(dcmlist))
 
     dicomset = DicomSet(dcmlist)
-    
+
     if update_cache:
         for cache, is_stale in dcm_cache['caches'].iteritems():
             if not is_stale:
@@ -410,7 +409,7 @@ def read(path=None, disp=True, recursive=False, progress=lambda x:x, use_info=Tr
                               use_info=False, update_cache=False, disp=False))
 
     if use_info:
-        infos = dcminfo.read(path, recursive) 
+        infos = dcminfo.read(path, recursive)
         dcminfo.update_metadata(infos, dicomset)
 
     if disp:
@@ -486,7 +485,7 @@ def disp(dicomset, extra_columns=tuple(), show_meta=True):
                                       retval='?')),
                ('Seq', lambda s: s.first.meta.get('sequence') or ''),
                ('ROI', lambda s: '*' if 'roi' in s.first.meta else '')]
-    
+
     if dicomset.count > 0:
         for study in dicomset.studies():
             st = study.first
@@ -495,7 +494,7 @@ def disp(dicomset, extra_columns=tuple(), show_meta=True):
             print('StudyInstanceUID: %r' % st.StudyInstanceUID)
             if show_meta and hasattr(st, 'meta'):
                 print('Meta: %r' % st.meta.dict())
-           
+
             t = PrettyTable([_column_name(col) for col in columns])
             t.align = 'l'
             for series in study.series():
@@ -533,7 +532,6 @@ def view(dicoms, groupby=tuple(), roi_filename=None, roi_tag=None, viewer=None, 
     arr = data(dicoms, field='pixel_array', groupby=groupby)
     if viewer == 'matplotlib':
         assert 2 <= arr.ndim <= 4, 'matplotlib viewer can only handle 4 or less dims'
-        
         import pylab
         from matplotlib import gridspec
         shape = arr.shape
