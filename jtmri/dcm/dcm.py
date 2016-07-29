@@ -24,7 +24,7 @@ from jtmri.utils import flatten
 log = logging.getLogger(__name__)
 
 
-CACHE_FILE_NAME = '.cache'
+CACHE_FILE_NAME = '.dcmcache'
 
 class DicomParser(object):
     @staticmethod
@@ -107,7 +107,7 @@ class DicomSet(object):
     @property
     def all(self):
         '''Access an attribute from all objects in this set'''
-        return ListAttrAccessor(self) 
+        return ListAttrAccessor(self)
 
     @property
     def all_unique(self):
@@ -300,12 +300,12 @@ class DicomCacheException(Exception):
 
 
 def _load_cache(filename):
-    '''Load a list of dicoms from a pickle object
+    """Load a list of dicoms from a pickle object
     Args:
         filename -- Filename of pickle object to load dicoms from
 
     Returns: A list of dicoms from the objects stored in the pickle object
-    '''
+    """
     with open(filename, 'r') as f:
         data = f.read()
         try:
@@ -352,7 +352,7 @@ def _get_cached_dcm(cache, path, no_cache):
     dirname = os.path.dirname(path)
     cache_filename = os.path.join(dirname, CACHE_FILE_NAME)
     if not no_cache:
-        if cache_filename not in cache['caches'] and os.path.exists(cache_filename):
+        if cache_filename not in cache['caches'] and os.path.isfile(cache_filename):
             log.debug('loading cache file %s' % cache_filename)
             try:
                 cache['dcms'].update({dcm.filename:dcm for dcm in _load_cache(cache_filename)})

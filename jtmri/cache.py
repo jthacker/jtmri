@@ -8,7 +8,7 @@ import logging
 import shutil
 import os.path
 
-log = logging.getLogger('jtmri.cache')
+log = logging.getLogger(__name__)
 
 
 StoreInfo = namedtuple('StoreInfo', 'disk_used,mem_used')
@@ -112,19 +112,19 @@ DictProxyType = type(object.__dict__)
 # TODO: This function sucks
 def make_hash(o):
     """
-    Makes a hash from a dictionary, list, tuple or set to any level, that 
+    Makes a hash from a dictionary, list, tuple or set to any level, that
     contains only other hashable types (including any lists, tuples, sets, and
-    dictionaries). In the case where other kinds of objects (like classes) need 
-    to be hashed, pass in a collection of object attributes that are pertinent. 
+    dictionaries). In the case where other kinds of objects (like classes) need
+    to be hashed, pass in a collection of object attributes that are pertinent.
     For example, a class can be hashed in this fashion:
-  
+
     make_hash([cls.__dict__, cls.__name__])
 
     A function can be hashed like so:
 
     make_hash([fn.__dict__, fn.__code__])
     """
-    
+
     if type(o) == DictProxyType:
         o2 = {}
         for k, v in o.items():
@@ -137,14 +137,14 @@ def make_hash(o):
 
     if isinstance(o, np.ndarray):
         return sha1(o).hexdigest()
-        
+
     if not isinstance(o, dict):
         return hash(o)
 
     for k, v in o.items():
         o[k] = make_hash(v)
 
-    return hash(tuple(frozenset(o.items())))  
+    return hash(tuple(frozenset(o.items())))
 
 
 def func_hash(func, args, kwargs):
@@ -161,11 +161,11 @@ cache = Cache(DirectoryStore('~/.local/share/jtmri/cache'))
 
 @decorator
 def persistent_memoize(func, *args, **kwargs):
-    '''Use this decorator to give you function persistent 
-    across interpreter sessions. If the same arguments are 
-    given to your function then this should result in the 
-    same value being returned. For this reason, any function 
-    being memoized should be a pure function with no side effects, 
+    '''Use this decorator to give you function persistent
+    across interpreter sessions. If the same arguments are
+    given to your function then this should result in the
+    same value being returned. For this reason, any function
+    being memoized should be a pure function with no side effects,
     at least if you expect consistent behaviour.
     '''
     fhash = func_hash(func, args, kwargs)

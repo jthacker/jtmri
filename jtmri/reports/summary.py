@@ -26,7 +26,7 @@ class ROITable(Table):
             masked = roiset.to_masked(data, collapse=True)
             row = (name,
                    observer,
-                   roi_name, 
+                   roi_name,
                    fmt(masked.mean()),
                    fmt(masked.std()),
                    (~masked.mask).sum())
