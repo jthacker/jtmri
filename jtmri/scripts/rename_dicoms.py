@@ -1,9 +1,8 @@
-#!/usr/bin/env python
 import argparse
 import os
 import shutil
 import sys
-import jtmri.dcm
+
 
 def filter_expr(expr_str):
     if expr_str is None:
@@ -11,7 +10,8 @@ def filter_expr(expr_str):
     else:
         return eval('lambda dcm: %s' % expr_str)
 
-if __name__ == '__main__':
+
+def main():
     parser = argparse.ArgumentParser(description='Rename a set of '
             'dicom files')
     parser.add_argument('--ext', default='ima',
@@ -30,6 +30,8 @@ if __name__ == '__main__':
 
     if not args.pretend and args.outputdir and not os.path.exists(args.outputdir):
         os.mkdir(args.outputdir)
+
+    import jtmri.dcm
 
     count = 0
     for f in args.files:

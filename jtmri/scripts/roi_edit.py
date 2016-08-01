@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import re
 
 from terseparse import Arg, Parser, types
@@ -38,7 +37,7 @@ class DimEditType(types.Type):
 
 class RenameType(types.Type):
     name = 'rename'
-   
+
     def convert(self, val):
         m = re.match(r'(.*[^\\]),(.*)', val)
         if m is None:
@@ -67,15 +66,15 @@ def fmt_slc(slc):
     return ','.join(map(str, slc))
 
 
+p = Parser('roi-edit', description,
+    Arg('--dim', 'dimension to flatten', DimEditType(), default=[], action='append'),
+    Arg('--ndim', 'final number of dimensions', types.Int.positive, default=-1),
+    Arg('--pretend', 'do not commit any actions to disk, just pretend', action='store_true'),
+    Arg('--rename', 'old,new name mapping, multiple --rename args can be specified', RenameType(), default=[], action='append'),
+    Arg('files', 'roi files to flatten', nargs='+'))
 
-if __name__ == '__main__':
-    p = Parser('roi-edit', description,
-        Arg('--dim', 'dimension to flatten', DimEditType(), default=[], action='append'),
-        Arg('--ndim', 'final number of dimensions', types.Int.positive, default=-1),
-        Arg('--pretend', 'do not commit any actions to disk, just pretend', action='store_true'),
-        Arg('--rename', 'old,new name mapping, multiple --rename args can be specified', RenameType(), default=[], action='append'),
-        Arg('files', 'roi files to flatten', nargs='+'))
 
+def main():
     _, args = p.parse_args()
 
     if args.ns.pretend:
@@ -128,7 +127,7 @@ if __name__ == '__main__':
                 edited = True
             else:
                 edits.append('name: {}'.format(roi.name))
-            print('  '.join(edits)) 
+            print('  '.join(edits))
 
             roi.slc = slc
             roi.name = name

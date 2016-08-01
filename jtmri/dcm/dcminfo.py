@@ -81,7 +81,7 @@ class Series(object):
 
     def add_metadata(self, meta, dcm, study_dcms):
         _update_meta(self.meta, meta)
-        self._add_metadata_seq(meta, dcm, study_dcms) 
+        self._add_metadata_seq(meta, dcm, study_dcms)
 
     def _add_metadata_seq(self, meta, dcm, study_dcms):
         if self.sequence is not None:
@@ -127,7 +127,6 @@ class GRE(object):
             phase_saved = dcm.Siemens.MrPhoenixProtocol['ucReconstructionMode'] == '0x8'
             t2star_series_num = dcm.SeriesNumber + (2 if phase_saved else 1)
             r2star_series_num = dcm.SeriesNumber + (3 if phase_saved else 2)
-            
             meta.t2star_series = t2star_series_num
             r2star = study_dcms.by_series(r2star_series_num)
             if len(r2star) > 0 and 'ImageComments' in r2star.first and r2star.first.ImageComments == 'r2star image':
@@ -232,7 +231,7 @@ class ASLNAV(object):
         # TODO: Some CKD-LONG scans do not seem to have this parameter (e.g. RH217, VW405)
         #meta.inv_delay = int(dcm.Siemens.MrPhoenixProtocol['sWipMemBlock']['alFree']['1']) / 1000.
         return meta
-_register_seq('asl-nav', ASLNAV) 
+_register_seq('asl-nav', ASLNAV)
 
 
 def _convert(raw_infos):
@@ -275,7 +274,7 @@ class ROIReader(object):
     load ROIs from disk. Lazy objects need to be placed in attributes in the AttributeDict
     in order to be auto loaded when requested.
 
-    Call is memoized as well so it will return the same object when called with the 
+    Call is memoized as well so it will return the same object when called with the
     same arguments
     """
     def __init__(self):
@@ -296,7 +295,7 @@ class ROIReader(object):
                     series_files[series_number].append(path)
         self._paths[rois_dir] = series_files
         return series_files
-    
+
     @memoize
     def __call__(self, roidir, series_number):
         """Find all rois for the given series_number under the rois directory

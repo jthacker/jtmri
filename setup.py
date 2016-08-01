@@ -23,4 +23,10 @@ setup(name='jtmri',
         tests_require=[
             'pytest',
             ],
-        setup_requires=['pytest-runner'])
+        setup_requires=['pytest-runner'],
+        entry_points={'console_scripts': [
+            'asl-rbf-to-dicom = jtmri.scripts.asl_rbf_to_dicom:main',
+            'rename-dicoms = jtmri.scripts.rename_dicoms:main',
+            'roi-edit = jtmri.scripts.roi_edit:main',
+            ]},
+        )
