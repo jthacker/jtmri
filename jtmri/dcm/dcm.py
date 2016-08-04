@@ -289,9 +289,12 @@ def _store_cache(dcms):
         caches[dirname]['dcms'].append(dcm)
     for cache_dir, cache in caches.iteritems():
         cache_path = os.path.join(cache_dir, CACHE_FILE_NAME)
-        with open(cache_path, 'w') as f:
-            log.debug('writing %d objects to cache at %s' % (len(cache['dcms']), cache_path))
-            pickle.dump(cache, f, protocol=2)
+        try:
+            with open(cache_path, 'w') as f:
+                log.debug('writing %d objects to cache at %s' % (len(cache['dcms']), cache_path))
+                pickle.dump(cache, f, protocol=2)
+        except IOError as err:
+            log.error('failed to write cache to %r. %r', cache_path, err)
 
 
 class DicomCacheException(Exception):
