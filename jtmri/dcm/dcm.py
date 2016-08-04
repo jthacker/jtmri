@@ -34,7 +34,7 @@ class DicomParser(object):
     @staticmethod
     def to_dict(dcm, wrap=dict):
         d = DicomParser._dicom_to_dict(dcm, wrap)
-        d['InstanceCreationTimestamp'] = instance_creation_timestamp(d)
+        d['InstanceCreationTimestamp'] = instance_creation_timestamp(dcm)
         d['Siemens'] = wrap(SiemensProtocol.from_dicom(dcm))
         pixel_array = None
         try:
@@ -584,8 +584,13 @@ def dcm_copy(dicoms, dest):
 
 
 def instance_creation_timestamp(dcm):
-    t = arrow.get(dcm.get('InstanceCreationDate') + dcm.get('InstanceCreationTime'), 'YYYYMMDDHHmmss.SSSSSS')
-    return t.timestamp + t.microsecond / 1e6
+    date = dcm.get('InstanceCreationDate')
+    time = dcm.get('InstanceCreationTime')
+    if date and time:
+        t = arrow.get(date + time, 'YYYYMMDDHHmmss.SSSSSS')
+        return t.timestamp + t.microsecond / 1e6
+    log.error('dicom is missing InstanceCreationDate and/or InstanceCreationTime. path:%r', dcm.filename)
+    return 0.
 
 
 _clean_rgx = re.compile('[^\w\-\_]')
