@@ -127,7 +127,7 @@ def main():
     dcm.SeriesDescription = 'ASL recon: %s' % dcm.get('SeriesDescription', 'NONE')
 
     pixel_array = args.ns.rbf.astype(float)
-    cols, rows = pixel_array.shape
+    rows, cols = pixel_array.shape
     dcm.Rows = rows
     dcm.Columns = cols
     dcm.SamplesPerPixel = 1
