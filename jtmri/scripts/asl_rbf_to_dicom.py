@@ -49,7 +49,7 @@ def pick(dcms):
 
 def get_asl_series(series_num, dcms):
     if series_num == 'smart-pick':
-        return pick(dcms.filter(filter_error(lambda d: d.SequenceName == 'tfi2d1_128', catch=AttributeError)))
+        return pick(dcms.filter(filter_error(lambda d: d.SequenceName.lower().startswith('tfi2d1'), catch=AttributeError)))
     elif series_num == 'pick':
         return pick(dcms)
     return dcms.by_series(series_num)
