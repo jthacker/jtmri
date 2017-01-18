@@ -7,7 +7,6 @@ setup(name='jtmri',
         packages=find_packages(),
         include_package_data = True,
         install_requires=[
-            'arrview>=1.1',
             'arrow',
             'fuzzywuzzy',
             'h5py',

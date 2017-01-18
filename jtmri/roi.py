@@ -3,7 +3,7 @@ from collections import namedtuple, defaultdict
 import logging
 import os
 
-from arrview.slicer import SliceTuple
+from .slice_tuple import SliceTuple
 import h5py
 import numpy as np
 from prettytable import PrettyTable
